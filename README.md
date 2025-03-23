@@ -1,52 +1,49 @@
-# LinkedIn Easy Apply Bot
+# 🧠 LinkedIn Easy Apply Bot with Offline AI Integration (Ollama)
 
-_Automate your LinkedIn job applications with ease!_
+This project automates the LinkedIn Easy Apply job application process, enhanced with **AI-powered resume tailoring** and **application question answering** using **offline LLMs via Ollama**.
 
-This Python and Selenium-based bot automates applying to jobs using the Easy Apply feature on LinkedIn.
+## 🚀 Features
 
-## Key Features
+- 🔁 Auto-login and apply to jobs using LinkedIn's Easy Apply
+- 🧠 AI-powered question answering for job applications (text, numeric, choice)
+- 📄 Resume tailoring using LLMs based on job description
+- 📊 Skills replacement suggestions to optimize ATS score
+- 🧾 Works with PDF and DOCX resumes
+- 🛡️ Completely offline AI integration using **Ollama + phi4-mini**
 
-- Apply to thousands of jobs effortlessly.
-- Track application dates and times for performance analysis.
+## 🧩 Technologies Used
 
-## Important
+- Python (Selenium, PDF, DOCX)
+- Ollama for offline LLM chat
+- `phi4-mini` model
+- PyAutoGUI (to prevent system sleep)
+- Regex, JSON, CSV, and automation utilities
 
-- Use at your own risk. LinkedIn may restrict or suspend accounts for bot usage.
-- Consider this an educational project.
+## 📦 Getting Started
 
-## Getting Started
+1. Clone the repository
+2. Configure `config.yaml` with your details (LinkedIn credentials, resume path, etc.)
+3. Run the bot using your preferred driver (e.g., Chrome WebDriver)
+4. Ensure Ollama and the `phi4-mini` model are running locally
 
-1. Modify the `config.py` file locally to include your LinkedIn credentials, personal information, and job preferences.
+## ⚙️ AI Capabilities
 
-2. Install python3 and pip3 on your system. Then, install the required dependencies using the following commands: (Unix commands)
-```bash
-sudo apt-get install python3
-python3 -m pip install -r requirements.txt
-```
+- Uses LLM to:
+  - Extract job-specific skills
+  - Replace outdated resume skills
+  - Tailor and regenerate resume (DOCX to PDF)
+  - Answer custom LinkedIn application questions
+  - Evaluate job fit (optional)
 
-3. Run the bot with python
-```bash
-python3 main.py
-```
+## 📁 Repository Status
 
-Optionally, watch this video tutorial by [voidbydefault](https://github.com/voidbydefault) during his time maintaining the project, on [YouTube](https://youtu.be/IXflenwJzhQ).
+> This project is a **modified version** of a popular LinkedIn Easy Apply Bot with enhanced AI capabilities via offline models.  
+Original credit: [Original GitHub Repo](https://github.com/originaluser/originalrepo)
 
-## Additional Resources
+## 📜 License
 
-- Optional BI dashboard setup: Watch this [YouTube](https://youtu.be/4LH8WTrMCxw) video.
-- **Troubleshooting:** Encounter errors? Ensure dependencies are installed.
-- **Issues** Raise issues page at my GitHub.
+This project is for educational and personal use only. Do not use it to spam applications or violate LinkedIn's terms.
 
-## Support This Project
+---
 
-By supporting this project, you help maintain and improve the bot. Your support is greatly appreciated!
-
-See the sponsor button on the top right of the page or [click here](https://github.com/sponsors/madingess).
-
-Also, buy a coffee for [voidbydefault](https://github.com/voidbydefault) through [PayPal](https://paypal.me/voidbydefault) for his efforts maintaining and improving this bot!
-
-## Credits
-
-- Maintenance and significant updates: [Micheal Dingess](https://github.com/madingess/)
-- Improvements and maintenance contributions: [voidbydefault](https://github.com/voidbydefault) with fork [voidbydefault/EasyApplyBot](https://github.com/voidbydefault/EasyApplyBot)
-- Original developer: [Nathan Duma](https://github.com/NathanDuma) with [NathanDuma/LinkedIn-Easy-Apply-Bot](https://github.com/NathanDuma/LinkedIn-Easy-Apply-Bot)
+🔐 **Important:** Keep your `config.yaml` and credentials private. Do not upload them to any public repo.
