@@ -7,3 +7,5 @@ chrome_bot/
 .vscode/
 failed.csv
 output.csv
+config.yaml
+resume_update.py

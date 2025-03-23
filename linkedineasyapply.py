@@ -10,17 +10,22 @@ from selenium.webdriver.support.ui import Select
 from datetime import date, datetime
 from itertools import product
 from pypdf import PdfReader
-from openai import OpenAI
+import requests
+from docx import Document
+from docx2pdf import convert
+import json
+import ollama
 
 class AIResponseGenerator:
-    def __init__(self, api_key, personal_info, experience, languages, resume_path, text_resume_path=None, debug=False):
+    def __init__(self, api_key, personal_info, experience, languages, resume_path, checkboxes, text_resume_path=None, debug=False):
         self.personal_info = personal_info
         self.experience = experience
         self.languages = languages
         self.pdf_resume_path = resume_path
         self.text_resume_path = text_resume_path
+        self.checkboxes = checkboxes
         self._resume_content = None
-        self._client = OpenAI(api_key=api_key) if api_key else None
+        self._client = True
         self.debug = debug
     @property
     def resume_content(self):
@@ -52,16 +57,113 @@ class AIResponseGenerator:
         return f"""
         Personal Information:
         - Name: {self.personal_info['First Name']} {self.personal_info['Last Name']}
-        - Current Role: {self.experience.get('currentRole', '')}
+        - Current Role: {self.experience.get('currentRole', 'AI Specialist')}
+        - Current Location: {self.personal_info['City']}, {self.personal_info['State']}, United States
+        - Authorized to work in the US: {'Yes' if self.checkboxes.get('legallyAuthorized') else 'No'}
         - Skills: {', '.join(self.experience.keys())}
         - Languages: {', '.join(f'{lang}: {level}' for lang, level in self.languages.items())}
         - Professional Summary: {self.personal_info.get('MessageToManager', '')}
 
-        Resume Content (Give the greatest weight to this information, if specified):
+        Resume Content:
         {self.resume_content}
         """
+    def get_tailored_skills_replacements(self,job_description):
+        # context = self._build_context()
+        system_prompt = f"""You are an expert resume and job description analyst.
 
-    def generate_response(self, question_text, response_type="text", options=None, max_tokens=100):
+            Your task is to read the job description below and extract the **top 10 technical skills or tools** that are essential for the role.
+
+            Guidelines:
+            - Return skills exactly as written in the job description (no synonyms, no rewording).
+            - Include programming languages, libraries, frameworks, cloud platforms, APIs, machine learning techniques, tools, and standards mentioned.
+            - Focus on the most important and unique technical terms. Do not include soft skills or generic phrases.
+            - Return the output as a **comma-separated list** of skill keywords, in order of relevance and frequency.
+
+            Job Description:
+            {job_description}
+            """
+        response = requests.post("http://localhost:11434/api/generate", json={
+                    "model": "phi4-mini",
+                    "prompt": system_prompt,
+                    "stream": False
+                })
+        job_skills = response['message']['content'].strip()
+        
+        MAX_SKILL_REPLACEMENTS = 5
+        system_prompt ="""
+                        You are an AI assistant specialized in optimizing resumes for Applicant Tracking Systems (ATS).
+
+                        Your task:
+                        Given a list of resume skills and a list of job description skills, identify **exactly 5 skills** from the resume that can be replaced with **more relevant skills from the job description** to improve alignment and ATS score.
+
+                        Strict Rules:
+                        1. Each "old" skill must exist in the resume.
+                        2. Each "new" skill must exist in the job description and **must NOT already exist in the resume**.
+                        3. DO NOT suggest replacements that are already present in the resume in any form (no duplicates, no synonyms).
+                        4. Only suggest replacements where the old and new skills are **semantically similar** — i.e., they belong to the same category or purpose (e.g., frameworks, cloud platforms, dev tools, AI methods, APIs).
+                        5. Return **exactly 5 valid replacements**. If there are not enough matches, return fewer — do not force unrelated replacements.
+                        6. Your output must be a **JSON array**, in this exact format:
+
+                        [
+                        {"old": "old_resume_skill", "new": "new_job_description_skill"},
+                        {"old": "old_resume_skill", "new": "new_job_description_skill"},
+                        ...
+                        ]
+
+                        Do not include any explanation, heading, or commentary. Only output the JSON array.
+                                                """
+        try:
+            user_content=f""" Job Skills:
+                    {job_skills}
+
+                    Resume:
+                    {self.resume_content}
+                    """
+            response = requests.post("http://localhost:11434/api/generate", json={
+                    "model": "phi4-mini",
+                    "prompt": system_prompt+user_content,
+                    "stream": False
+                })
+            answer = response['message']['content'].strip()
+            replacements = json.loads(re.search(r'\[.*\]', answer, re.DOTALL).group())
+            print(f"AI response: {answer}") 
+            return replacements[:MAX_SKILL_REPLACEMENTS]
+        except Exception as e:
+            print(f"Error using AI to generate resume tailoring skills: {str(e)}")
+            return None
+    def tailor_resume_pdf(self,replacements):
+        try:
+            # job_description = self.browser.find_element(
+            #                     By.ID, 'job-details'
+            #                 ).text 
+            # replacements=self.get_tailored_skills_replacements(job_description)
+            doc = Document(self.docx_resume)
+            def replace_in_runs(runs, old, new):
+                for run in runs:
+                    if old in run.text:
+                        run.text = run.text.replace(old, new)
+
+            for paragraph in doc.paragraphs:
+                for r in replacements:
+                    replace_in_runs(paragraph.runs, r['old'], r['new'])
+            output_docx_path= "Pratik_Shankar_Jadhav.docx"
+            output_pdf_path= "Pratik_Shankar_Jadhav_.pdf"
+            doc.save(output_docx_path)
+            convert(output_docx_path, output_pdf_path)
+            self.resume_dir = output_pdf_path
+            print(f"Resume updated and converted to PDF and resume path changed: {output_pdf_path}")
+
+        except Exception as e:
+            print(f"Error using tailor resume: {str(e)}")
+            return None
+
+
+
+
+            
+            
+
+    def generate_response(self, question_text, response_type="text", options=None, max_tokens=100, jd=""):
         """
         Generate a response using OpenAI's API
         
@@ -76,34 +178,38 @@ class AIResponseGenerator:
             - For numeric: Integer value or None
             - For choice: Integer index of selected option or None
         """
-        if not self._client:
-            return None
+        # if not self._client:
+        #     return None
             
         try:
             context = self._build_context()
-            
+            print(context)
             system_prompt = {
                 "text": "You are a helpful assistant answering job application questions professionally and concisely. Use the candidate's background information and resume to personalize responses.",
                 "numeric": "You are a helpful assistant providing numeric answers to job application questions. Based on the candidate's experience, provide a single number as your response. No explanation needed.",
                 "choice": "You are a helpful assistant selecting the most appropriate answer choice for job application questions. Based on the candidate's background, select the best option by returning only its index number. No explanation needed."
             }[response_type]
 
-            user_content = f"Using this candidate's background and resume:\n{context}\n\nPlease answer this job application question: {question_text}"
+            user_content = f"Using this candidate's background and resume:\n{context} JD{jd}\n\nPlease answer this job application question: {question_text}"
             if response_type == "choice" and options:
                 options_text = "\n".join([f"{idx}: {text}" for idx, text in options])
                 user_content += f"\n\nSelect the most appropriate answer by providing its index number from these options:\n{options_text}"
 
-            response = self._client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            response = ollama.chat(
+                model="phi4-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
                 ],
-                max_tokens=max_tokens,
-                temperature=0.7
+                options={
+                            'num_predict': max_tokens,     # Equivalent to max_tokens
+                            'temperature': 0.7      # Set your desired temperature here
+                        }
+                # max_tokens=max_tokens,
+                # temperature=0.7
             )
             
-            answer = response.choices[0].message.content.strip()
+            answer = response['message']['content'].strip()
             print(f"AI response: {answer}")  # TODO: Put logging behind a debug flag
             
             if response_type == "numeric":
@@ -130,7 +236,7 @@ class AIResponseGenerator:
 
     def evaluate_job_fit(self, job_title, job_description):
         """
-        Evaluate whether a job is worth applying to based on the candidate's experience and the job requirements
+        Given a job description and my current resume, evaluate whether this job is worth applying for based on a 50–60% alignment threshold.
         
         Args:
             job_title: The title of the job posting
@@ -139,25 +245,14 @@ class AIResponseGenerator:
         Returns:
             bool: True if should apply, False if should skip
         """
-        if not self._client:
-            return True  # Proceed with application if AI not available
+        # if not self._client:
+        #     return True  # Proceed with application if AI not available
             
         try:
             context = self._build_context()
-            
-            system_prompt = """You are evaluating job fit for technical roles. 
-            Recommend APPLY if:
-            - Candidate meets 65 percent of the core requirements
-            - Experience gap is 2 years or less
-            - Has relevant transferable skills
-            
-            Return SKIP if:
-            - Experience gap is greater than 2 years
-            - Missing multiple core requirements
-            - Role is clearly more senior
-            - The role is focused on an uncommon technology or skill that is required and that the candidate does not have experience with
-            - The role is a leadership role or a role that requires managing people and the candidate has no experience leading or managing people
-
+            print(context)
+            system_prompt = """
+                    if changing up to 5 skills or keywords can improve the alignment to at least 50 to 60% then apply.
             """
             #Consider the candidate's education level when evaluating whether they meet the core requirements. Having higher education than required should allow for greater flexibility in the required experience.
             
@@ -171,17 +266,21 @@ class AIResponseGenerator:
             else:
                 system_prompt += """Return only APPLY or SKIP."""
 
-            response = self._client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            response = ollama.chat(
+                model="phi4-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}\n\nCandidate:\n{context}"}
                 ],
-                max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
-                temperature=0.2  # Lower temperature for more consistent decisions
+                options={
+                            'num_predict': 250 if self.debug else 1,     # Equivalent to max_tokens
+                            'temperature': 0.7      # Set your desired temperature here
+                        }
+                # max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
+                # temperature=0.2  # Lower temperature for more consistent decisions
             )
             
-            answer = response.choices[0].message.content.strip()
+            answer = response['message']['content'].strip()
             print(f"AI evaluation: {answer}")
             return answer.upper().startswith('A')  # True for APPLY, False for SKIP
             
@@ -209,6 +308,7 @@ class LinkedinEasyApply:
         self.output_file_directory = parameters['outputFileDirectory']
         self.resume_dir = parameters['uploads']['resume']
         self.text_resume = parameters.get('textResume', '')
+        self.docx_resume = parameters.get('docxResume','')
         if 'coverLetter' in parameters['uploads']:
             self.cover_letter_dir = parameters['uploads']['coverLetter']
         else:
@@ -224,12 +324,14 @@ class LinkedinEasyApply:
         self.experience_default = int(self.experience['default'])
         self.debug = parameters.get('debug', False)
         self.evaluate_job_fit = parameters.get('evaluateJobFit', True)
+        self.tailor_resume = parameters.get('tailorResume', True)
         self.ai_response_generator = AIResponseGenerator(
             api_key=self.openai_api_key,
             personal_info=self.personal_info,
             experience=self.experience,
             languages=self.languages,
             resume_path=self.resume_dir,
+            checkboxes=self.checkboxes,
             text_resume_path=self.text_resume,
             debug=self.debug
         )
@@ -469,7 +571,15 @@ class LinkedinEasyApply:
                     # TODO: Check if the job is already applied or the application has been reached
                     # "You’ve reached the Easy Apply application limit for today. Save this job and come back tomorrow to continue applying."
                     # Do this before evaluating job fit to save on API calls
-
+                    if self.tailor_resume:
+                        try:
+                            job_description = self.browser.find_element(
+                                By.ID, 'job-details'
+                            ).text 
+                            replacements = self.ai_response_generator.get_tailored_skills_replacements(job_description)
+                            self.ai_response_generator.tailor_resume_pdf(replacements)
+                        except:
+                            print("Could not load job description and tailorResume")
                     if self.evaluate_job_fit:
                         try:
                             # Get job description
@@ -673,7 +783,7 @@ class LinkedinEasyApply:
                     answer = self.get_answer('driversLicence')
                 elif any(keyword in radio_text.lower() for keyword in
                          [
-                             'Aboriginal', 'native', 'indigenous', 'tribe', 'first nations',
+                             'Aboriginal', 'native', 'genous', 'tribe', 'first nations',
                              'native american', 'native hawaiian', 'inuit', 'metis', 'maori',
                              'aborigine', 'ancestral', 'native peoples', 'original people',
                              'first people', 'gender', 'race', 'disability', 'latino', 'torres',
@@ -755,7 +865,7 @@ class LinkedinEasyApply:
 
                 if to_select is None:
                     print("No answer determined")
-                    self.record_unprepared_question("radio", radio_text)
+                    
 
                     # Since no response can be determined, we use AI to identify the best responseif available, falling back to the final option if the AI response is not available
                     ai_response = self.ai_response_generator.generate_response(
@@ -767,6 +877,7 @@ class LinkedinEasyApply:
                         to_select = radio_labels[ai_response]
                     else:
                         to_select = radio_labels[len(radio_labels) - 1]
+                    self.record_unprepared_question("radio", radio_text,ai_response)
                 to_select.click()
 
                 if radio_labels:
@@ -806,8 +917,13 @@ class LinkedinEasyApply:
                             no_of_years = int(self.experience[experience])
                             break
                     if no_of_years is None:
-                        self.record_unprepared_question(text_field_type, question_text)
-                        no_of_years = int(self.experience_default)
+                        # self.record_unprepared_question(text_field_type, question_text)
+                        ai_response = self.ai_response_generator.generate_response(
+                                                                    question_text,
+                                                                    response_type="numeric"
+                                                                )
+                        no_of_years = ai_response if ai_response is not None else int(self.experience_default)
+                        self.record_unprepared_question(text_field_type, question_text,ai_response)
                     to_enter = no_of_years
 
                 elif 'grade point average' in question_text:
@@ -834,6 +950,15 @@ class LinkedinEasyApply:
                 elif 'message to hiring' in question_text or 'cover letter' in question_text:
                     to_enter = self.personal_info['MessageToManager']
 
+                    if not to_enter:
+                        job_title = self.get_current_job_title()
+                        job_description = self.get_current_job_description()
+                        self.ai_response_generator.generate_response(
+                        question_text,
+                        response_type="text",
+                        jd=job_description
+                    )
+
                 elif 'website' in question_text or 'github' in question_text or 'portfolio' in question_text:
                     to_enter = self.personal_info['Website']
 
@@ -848,7 +973,7 @@ class LinkedinEasyApply:
                         to_enter = int(self.salary_minimum)
                     else:
                         to_enter = float(self.salary_minimum)
-                    self.record_unprepared_question(text_field_type, question_text)
+                    
 
                 # Since no response can be determined, we use AI to generate a response if available, falling back to 0 or empty string if the AI response is not available
                 if text_field_type == 'numeric':
@@ -857,6 +982,7 @@ class LinkedinEasyApply:
                             question_text,
                             response_type="numeric"
                         )
+                        self.record_unprepared_question(text_field_type, question_text,ai_response)
                         to_enter = ai_response if ai_response is not None else 0
                 elif to_enter == '':
                     ai_response = self.ai_response_generator.generate_response(
@@ -1077,7 +1203,7 @@ class LinkedinEasyApply:
 
                 else:
                     print(f"Unhandled dropdown question: {question_text}")
-                    self.record_unprepared_question("dropdown", question_text)
+                    
 
                     # Since no response can be determined, we use AI to identify the best responseif available, falling back "yes" or the final response if the AI response is not available
                     choice = options[len(options) - 1]
@@ -1087,6 +1213,7 @@ class LinkedinEasyApply:
                         response_type="choice",
                         options=choices
                     )
+                    self.record_unprepared_question("dropdown", question_text,ai_response)
                     if ai_response is not None:
                         choice = options[ai_response]
                     else:
@@ -1207,8 +1334,8 @@ class LinkedinEasyApply:
             writer = csv.writer(f)
             writer.writerow(to_write)
 
-    def record_unprepared_question(self, answer_type, question_text):
-        to_write = [answer_type, question_text]
+    def record_unprepared_question(self, answer_type, question_text,airesponse=""):
+        to_write = [answer_type, question_text,airesponse]
         file_path = self.unprepared_questions_file_name + ".csv"
 
         try:
