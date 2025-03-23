@@ -38,7 +38,7 @@ This project automates the LinkedIn Easy Apply job application process, enhanced
 ## 📁 Repository Status
 
 > This project is a **modified version** of a popular LinkedIn Easy Apply Bot with enhanced AI capabilities via offline models.  
-Original credit: [Original GitHub Repo](https://github.com/originaluser/originalrepo)
+Original credit: https://github.com/NathanDuma/LinkedIn-Easy-Apply-Bot
 
 ## 📜 License
 
