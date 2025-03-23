@@ -139,7 +139,7 @@ def validate_yaml():
 
     if parameters.get('openaiApiKey') == 'sk-proj-your-openai-api-key':
         # Overwrite the default value with None to indicate internally that the OpenAI API key is not configured
-        print("OpenAI API key not configured. Defaulting to empty responses for text fields.")
+        # print("OpenAI API key not configured. Defaulting to empty responses for text fields.")
         parameters['openaiApiKey'] = None
 
     return parameters

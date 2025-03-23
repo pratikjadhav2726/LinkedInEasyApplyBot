@@ -17,7 +17,7 @@ import json
 import ollama
 
 class AIResponseGenerator:
-    def __init__(self, api_key, personal_info, experience, languages, resume_path, checkboxes, text_resume_path=None, debug=False):
+    def __init__(self, api_key, personal_info, experience, languages, resume_path, checkboxes, ollama_model, text_resume_path=None, debug=False):
         self.personal_info = personal_info
         self.experience = experience
         self.languages = languages
@@ -26,6 +26,7 @@ class AIResponseGenerator:
         self.checkboxes = checkboxes
         self._resume_content = None
         self._client = True
+        self.ollama_model = ollama_model
         self.debug = debug
     @property
     def resume_content(self):
@@ -83,7 +84,7 @@ class AIResponseGenerator:
             {job_description}
             """
         response = requests.post("http://localhost:11434/api/generate", json={
-                    "model": "phi4-mini",
+                    "model": self.ollama_model,
                     "prompt": system_prompt,
                     "stream": False
                 })
@@ -120,7 +121,7 @@ class AIResponseGenerator:
                     {self.resume_content}
                     """
             response = requests.post("http://localhost:11434/api/generate", json={
-                    "model": "phi4-mini",
+                    "model": self.ollama_model,
                     "prompt": system_prompt+user_content,
                     "stream": False
                 })
@@ -196,7 +197,7 @@ class AIResponseGenerator:
                 user_content += f"\n\nSelect the most appropriate answer by providing its index number from these options:\n{options_text}"
 
             response = ollama.chat(
-                model="phi4-mini",
+                model=self.ollama_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
@@ -252,22 +253,25 @@ class AIResponseGenerator:
             context = self._build_context()
             print(context)
             system_prompt = """
-                    if changing up to 5 skills or keywords can improve the alignment to at least 50 to 60% then apply.
+                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least 60 percent of the required qualifications. Otherwise, respond with SKIP.
+
+Only return APPLY or SKIP.
             """
             #Consider the candidate's education level when evaluating whether they meet the core requirements. Having higher education than required should allow for greater flexibility in the required experience.
             
             if self.debug:
-                system_prompt += """
-                You are in debug mode. Return a detailed explanation of your reasoning for each requirement.
+                pass
+                # system_prompt += """
+                # You are in debug mode. Return a detailed explanation of your reasoning for each requirement.
 
-                Return APPLY or SKIP followed by a brief explanation.
+                # Return APPLY or SKIP followed by a brief explanation.
 
-                Format response as: APPLY/SKIP: [brief reason]"""
+                # Format response as: APPLY/SKIP: [brief reason]"""
             else:
                 system_prompt += """Return only APPLY or SKIP."""
 
             response = ollama.chat(
-                model="phi4-mini",
+                model=self.ollama_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}\n\nCandidate:\n{context}"}
@@ -294,6 +298,7 @@ class LinkedinEasyApply:
         self.email = parameters['email']
         self.password = parameters['password']
         self.openai_api_key = parameters.get('openaiApiKey', '')  # Get API key with empty default
+        self.ollama_model = parameters.get('ollamaModel', '')
         self.disable_lock = parameters['disableAntiLock']
         self.company_blacklist = parameters.get('companyBlacklist', []) or []
         self.title_blacklist = parameters.get('titleBlacklist', []) or []
@@ -333,7 +338,8 @@ class LinkedinEasyApply:
             resume_path=self.resume_dir,
             checkboxes=self.checkboxes,
             text_resume_path=self.text_resume,
-            debug=self.debug
+            debug=self.debug,
+            ollama_model=self.ollama_model
         )
 
     def login(self):
