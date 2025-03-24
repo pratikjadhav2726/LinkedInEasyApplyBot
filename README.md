@@ -34,6 +34,14 @@ This project automates the LinkedIn Easy Apply job application process, enhanced
   - Tailor and regenerate resume (DOCX to PDF)
   - Answer custom LinkedIn application questions
   - Evaluate job fit (optional)
+ 
+## 🔮 Future Work
+	- 💡 Improve resume tailoring using RAG with semantic chunking and vector retrieval for better alignment.
+	- 🧠 Add lightweight LLM-powered rewriting of resume sections based on job descriptions.
+	- 💬 Compress resume context for small models to reduce hallucination in question answering.
+	- 📊 Introduce confidence scoring and APPLY/SKIP justification for job fit evaluation.
+	- 🔄 Make model backend pluggable (e.g., phi4-mini, Mistral, TinyLlama).
+	- 🧪 Log outcomes to enable feedback loop and model fine-tuning.
 
 ## 📁 Repository Status
 
