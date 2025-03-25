@@ -184,7 +184,7 @@ class AIResponseGenerator:
             
         try:
             context = self._build_context()
-            print(context)
+            # print(context)
             system_prompt = {
                 "text": "You are a helpful assistant answering job application questions professionally and concisely. Use the candidate's background information and resume to personalize responses.",
                 "numeric": "You are a helpful assistant providing numeric answers to job application questions. Based on the candidate's experience, provide a single number as your response. No explanation needed.",
@@ -248,14 +248,35 @@ class AIResponseGenerator:
         """
         # if not self._client:
         #     return True  # Proceed with application if AI not available
+        try:
+            system_prompt=""" Given Job description summarize it in 70 words, focus on qualifications.
+"""
+            response = ollama.chat(
+                model=self.ollama_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Job: {job_title}\n{job_description}"}
+                ],
+                options={
+                            'num_predict': 250 if self.debug else 1,     # Equivalent to max_tokens
+                            'temperature': 0.7      # Set your desired temperature here
+                        }
+                # max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
+                # temperature=0.2  # Lower temperature for more consistent decisions
+            )
             
+            job_description = response['message']['content'].strip()
+            print(f"Job Summary: {job_description}")
+        except Exception as e:
+            print(f"Error evaluating job fit: {str(e)}")
+            return True  # Proceed with application if evaluation fails
         try:
             context = self._build_context()
-            print(context)
+            # print(context)
+            percent="80"
             system_prompt = """
-                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least 60 percent of the required qualifications. Otherwise, respond with SKIP.
-
-Only return APPLY or SKIP.
+                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least {percent} percent of the required qualifications. Otherwise, respond with SKIP.
+                Only return APPLY or SKIP.
             """
             #Consider the candidate's education level when evaluating whether they meet the core requirements. Having higher education than required should allow for greater flexibility in the required experience.
             
