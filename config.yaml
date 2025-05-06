@@ -246,3 +246,4 @@ docxResume: /home/Pratik/Documents/Applications/Resume/resume_export.docx
 
 # Debugging mode, used to print more information to the console and fetch more information in AI responses
 debug: False
+ollamaModel: your-model
