@@ -31,7 +31,7 @@ This project automates the LinkedIn Easy Apply job application process, enhanced
 - Uses LLM to:
   - Extract job-specific skills
   - Replace outdated resume skills
-  - Tailor and regenerate resume (DOCX to PDF)
+  - Tailor and regenerate resume (DOCX to PDF) -- Experimental
   - Answer custom LinkedIn application questions
   - Evaluate job fit (optional)
  
