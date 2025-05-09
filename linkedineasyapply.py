@@ -11,10 +11,11 @@ from datetime import date, datetime
 from itertools import product
 from pypdf import PdfReader
 import requests
-from docx import Document
+# from docx import Document
 from docx2pdf import convert
 import json
 import ollama
+from litellm import completion
 
 class AIResponseGenerator:
     def __init__(self, api_key, personal_info, experience, languages, resume_path, checkboxes, ollama_model, text_resume_path=None, debug=False):
@@ -53,7 +54,6 @@ class AIResponseGenerator:
                 print(f"Could not extract text from resume PDF: {str(e)}")
                 self._resume_content = ""
         return self._resume_content
-
     def _build_context(self):
         return f"""
         Personal Information:
@@ -186,7 +186,7 @@ class AIResponseGenerator:
             context = self._build_context()
             # print(context)
             system_prompt = {
-                "text": "You are a helpful assistant answering job application questions professionally and concisely. Use the candidate's background information and resume to personalize responses.",
+                "text": "You are a helpful assistant answering job application questions professionally and short. Use the candidate's background information and resume to personalize responses. Pretend you are the candidate.",
                 "numeric": "You are a helpful assistant providing numeric answers to job application questions. Based on the candidate's experience, provide a single number as your response. No explanation needed.",
                 "choice": "You are a helpful assistant selecting the most appropriate answer choice for job application questions. Based on the candidate's background, select the best option by returning only its index number. No explanation needed."
             }[response_type]
@@ -196,21 +196,17 @@ class AIResponseGenerator:
                 options_text = "\n".join([f"{idx}: {text}" for idx, text in options])
                 user_content += f"\n\nSelect the most appropriate answer by providing its index number from these options:\n{options_text}"
 
-            response = ollama.chat(
-                model=self.ollama_model,
+            response = completion(
+                model="groq/gemma2-9b-it",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
-                ],
-                options={
-                            'num_predict': max_tokens,     # Equivalent to max_tokens
-                            'temperature': 0.7      # Set your desired temperature here
-                        }
+                ]
                 # max_tokens=max_tokens,
                 # temperature=0.7
             )
             
-            answer = response['message']['content'].strip()
+            answer = response.choices[0]['message']['content'].strip()
             print(f"AI response: {answer}")  # TODO: Put logging behind a debug flag
             
             if response_type == "numeric":
@@ -271,11 +267,11 @@ class AIResponseGenerator:
             print(f"Error evaluating job fit: {str(e)}")
             return True  # Proceed with application if evaluation fails
         try:
-            context = self._build_context()
+            context=self._build_context()
             # print(context)
             percent="80"
             system_prompt = """
-                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least {percent} percent of the required qualifications. Otherwise, respond with SKIP.
+                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least 80 percent of the required qualifications. Otherwise, respond with SKIP.
                 Only return APPLY or SKIP.
             """
             #Consider the candidate's education level when evaluating whether they meet the core requirements. Having higher education than required should allow for greater flexibility in the required experience.
@@ -291,21 +287,19 @@ class AIResponseGenerator:
             else:
                 system_prompt += """Return only APPLY or SKIP."""
 
-            response = ollama.chat(
-                model=self.ollama_model,
+            response = completion(
+                model="groq/gemma2-9b-it",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}\n\nCandidate:\n{context}"}
                 ],
-                options={
-                            'num_predict': 250 if self.debug else 1,     # Equivalent to max_tokens
-                            'temperature': 0.7      # Set your desired temperature here
-                        }
+                temperature=0.7,
+                max_completion_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # temperature=0.2  # Lower temperature for more consistent decisions
             )
             
-            answer = response['message']['content'].strip()
+            answer = response.choices[0]['message']['content'].strip()
             print(f"AI evaluation: {answer}")
             return answer.upper().startswith('A')  # True for APPLY, False for SKIP
             
@@ -1016,6 +1010,7 @@ class LinkedinEasyApply:
                         question_text,
                         response_type="text"
                     )
+                    self.record_unprepared_question(text_field_type, question_text,ai_response)
                     to_enter = ai_response if ai_response is not None else " ‏‏‎ "
 
                 self.enter_text(txt_field, to_enter)
