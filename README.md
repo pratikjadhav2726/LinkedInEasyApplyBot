@@ -25,6 +25,7 @@ This project automates the LinkedIn Easy Apply job application process, enhanced
 2. Configure `config.yaml` with your details (LinkedIn credentials, resume path, etc.)
 3. Run the bot using your preferred driver (e.g., Chrome WebDriver)
 4. Ensure Ollama and the `phi4-mini` model are running locally
+5. Ensure you have Groq API Key in .env file.
 
 ## ⚙️ AI Capabilities
 
