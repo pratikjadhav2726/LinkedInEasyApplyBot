@@ -1,15 +1,16 @@
 # 🧠 LinkedIn Easy Apply Bot with Offline AI Integration (Ollama)
 
-This project automates the LinkedIn Easy Apply job application process, enhanced with **AI-powered resume tailoring** and **application question answering** using **offline LLMs via Ollama**.
+This project automates the LinkedIn Easy Apply job application process, enhanced with **AI-powered resume tailoring** and **application question answering** using **offline LLMs via Ollama**. With an option to use any LLM's from any providers **using LiteLLM**.
 
 ## 🚀 Features
 
-- 🔁 Auto-login and apply to jobs using LinkedIn's Easy Apply
-- 🧠 AI-powered question answering for job applications (text, numeric, choice)
-- 📄 Resume tailoring using LLMs based on job description
-- 📊 Skills replacement suggestions to optimize ATS score
-- 🧾 Works with PDF and DOCX resumes
-- 🛡️ Completely offline AI integration using **Ollama + phi4-mini**
+- Auto-login and apply to jobs using LinkedIn's Easy Apply
+- AI-powered question answering for job applications (text, numeric, choice)
+- Resume tailoring using LLMs based on job description
+- Skills replacement suggestions to optimize ATS score
+- Works with PDF and DOCX resumes
+- Completely offline AI integration using **Ollama + phi4-mini**
+- Flexibility to use any LLM of choice.
 
 ## 🧩 Technologies Used
 
@@ -37,12 +38,12 @@ This project automates the LinkedIn Easy Apply job application process, enhanced
   - Evaluate job fit (optional)
  
 ## 🔮 Future Work
-	- 💡 Improve resume tailoring using RAG with semantic chunking and vector retrieval for better alignment.
-	- 🧠 Add lightweight LLM-powered rewriting of resume sections based on job descriptions.
-	- 💬 Compress resume context for small models to reduce hallucination in question answering.
-	- 📊 Introduce confidence scoring and APPLY/SKIP justification for job fit evaluation.
-	- 🔄 Make model backend pluggable (e.g., phi4-mini, Mistral, TinyLlama).
-	- 🧪 Log outcomes to enable feedback loop and model fine-tuning.
+	- Improve resume tailoring using RAG with semantic chunking and vector retrieval for better alignment.
+	- Add lightweight LLM-powered rewriting of resume sections based on job descriptions.
+	- Compress resume context for small models to reduce hallucination in question answering.
+	- Introduce confidence scoring and APPLY/SKIP justification for job fit evaluation.
+	- Make model backend pluggable (e.g., phi4-mini, Mistral, TinyLlama).
+	- Log outcomes to enable feedback loop and model fine-tuning.
 
 ## 📁 Repository Status
 
