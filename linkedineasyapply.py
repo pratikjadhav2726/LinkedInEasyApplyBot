@@ -63,7 +63,6 @@ class AIResponseGenerator:
         - Authorized to work in the US: {'Yes' if self.checkboxes.get('legallyAuthorized') else 'No'}
         - Skills: {', '.join(self.experience.keys())}
         - Languages: {', '.join(f'{lang}: {level}' for lang, level in self.languages.items())}
-        - Professional Summary: {self.personal_info.get('MessageToManager', '')}
 
         Resume Content:
         {self.resume_content}
@@ -245,23 +244,19 @@ class AIResponseGenerator:
         # if not self._client:
         #     return True  # Proceed with application if AI not available
         try:
-            system_prompt=""" Given Job description summarize it in 70 words, focus on qualifications.
+            system_prompt=""" Given Job description summarize it in 120 words, focus on qualifications and years of experience and technical skills.
 """
-            response = ollama.chat(
-                model=self.ollama_model,
+            response = completion(
+                model="ollama/phi4-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}"}
-                ],
-                options={
-                            'num_predict': 250 if self.debug else 1,     # Equivalent to max_tokens
-                            'temperature': 0.7      # Set your desired temperature here
-                        }
+                ]
                 # max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # temperature=0.2  # Lower temperature for more consistent decisions
             )
             
-            job_description = response['message']['content'].strip()
+            job_description = response.choices[0]['message']['content'].strip()
             print(f"Job Summary: {job_description}")
         except Exception as e:
             print(f"Error evaluating job fit: {str(e)}")
@@ -271,7 +266,7 @@ class AIResponseGenerator:
             # print(context)
             percent="80"
             system_prompt = """
-                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least 80 percent of the required qualifications. Otherwise, respond with SKIP.
+                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least 80 percent of the required qualifications and experience. Otherwise, respond with SKIP.
                 Only return APPLY or SKIP.
             """
             #Consider the candidate's education level when evaluating whether they meet the core requirements. Having higher education than required should allow for greater flexibility in the required experience.
@@ -293,7 +288,7 @@ class AIResponseGenerator:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}\n\nCandidate:\n{context}"}
                 ],
-                temperature=0.7,
+                temperature=0.9,
                 max_completion_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # temperature=0.2  # Lower temperature for more consistent decisions
@@ -646,7 +641,67 @@ class LinkedinEasyApply:
                 print(f"Job for {company} by {poster} contains a blacklisted word {word}.")
 
             self.seen_jobs += link
+    def apply_to_greenhouse(self):
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
 
+        wait = WebDriverWait(self.browser, 20)
+
+        try:
+            # Optional: click the 'Apply' button again if present on Greenhouse
+            try:
+                apply_btn = wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Apply') or contains(text(), 'Apply for this job')]"))
+                )
+                apply_btn.click()
+            except:
+                pass  # May not be present
+
+            # Wait for file upload field (resume)
+            resume_upload = wait.until(
+                EC.presence_of_element_located((By.XPATH, "//input[@type='file' and contains(@name, 'resume')]"))
+            )
+            resume_upload.send_keys(self.resume_path)  # Ensure this is set in your class
+
+            # Fill required fields by name attribute
+            # (Update as per your config/data structure)
+            fields = {
+                'name': self.name,
+                'email': self.email,
+                'phone': self.phone
+            }
+            for key, value in fields.items():
+                try:
+                    field = self.browser.find_element(By.XPATH, f"//input[contains(@name, '{key}')]")
+                    field.clear()
+                    field.send_keys(value)
+                except:
+                    print(f"Field not found: {key}")
+
+            # Answer textareas (basic default)
+            textareas = self.browser.find_elements(By.TAG_NAME, "textarea")
+            for area in textareas:
+                area.send_keys("N/A")
+
+            # Tick all checkboxes (cautiously)
+            checkboxes = self.browser.find_elements(By.XPATH, "//input[@type='checkbox']")
+            for box in checkboxes:
+                try:
+                    box.click()
+                except:
+                    continue
+
+            # Submit the application
+            submit_btn = self.browser.find_element(By.XPATH, "//button[contains(text(), 'Submit')]")
+            submit_btn.click()
+            print("Submitted Greenhouse application!")
+            time.sleep(2)
+            return True
+
+        except Exception as e:
+            print("Greenhouse flow failed:", e)
+            return False
     def apply_to_job(self):
         easy_apply_button = None
 
@@ -665,6 +720,32 @@ class LinkedinEasyApply:
 
         print("Starting the job application...")
         easy_apply_button.click()
+        time.sleep(3)  # Wait for redirect/new tab
+
+        # --- New Logic: Check for External Application ---
+        main_window = self.browser.current_window_handle
+        all_windows = self.browser.window_handles
+
+        # If a new window/tab is opened, switch to it
+        for handle in all_windows:
+            if handle != main_window:
+                self.browser.switch_to.window(handle)
+                current_url = self.browser.current_url
+                print("Redirected to:", current_url)
+                
+                # If it's Greenhouse, handle with a new function
+                if "greenhouse.io" in current_url:
+                    try:
+                        success = self.apply_to_greenhouse()
+                        # Optionally close this tab and switch back to LinkedIn
+                        self.browser.close()
+                        self.browser.switch_to.window(main_window)
+                        return success
+                    except Exception as e:
+                        print("Greenhouse application failed:", e)
+                        self.browser.close()
+                        self.browser.switch_to.window(main_window)
+                        return False
 
         button_text = ""
         submit_application_text = 'submit application'
@@ -1431,7 +1512,7 @@ class LinkedinEasyApply:
                 date_url = dates[key]
                 break
 
-        easy_apply_url = "&f_AL=true"
+        easy_apply_url = ""
 
         extra_search_terms = [distance_url, remote_url, lessthanTenApplicants_url, newestPostingsFirst_url, job_types_url, experience_url]
         extra_search_terms_str = '&'.join(
