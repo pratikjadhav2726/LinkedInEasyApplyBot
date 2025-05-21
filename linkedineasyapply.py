@@ -641,66 +641,106 @@ class LinkedinEasyApply:
                 print(f"Job for {company} by {poster} contains a blacklisted word {word}.")
 
             self.seen_jobs += link
-    def apply_to_greenhouse(self):
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
 
-        wait = WebDriverWait(self.browser, 20)
 
+    def apply_to_greenhouse(self, jd=""):
+        """
+        Fills and submits a Greenhouse application form using AI-generated answers.
+        :param personal_info: dict with keys 'first_name', 'last_name', 'email', 'phone', 'resume_path', optional: 'cover_letter_path'
+        :param jd: (optional) job description to pass into LLM context
+        """
+        personal_info = self.personal_info
+        wait = WebDriverWait(self.browser, 15)
         try:
-            # Optional: click the 'Apply' button again if present on Greenhouse
+            # Wait for application form
+            wait.until(EC.presence_of_element_located((By.ID, "application-form")))
+
+            # Fill core fields
+            self.browser.find_element(By.ID, "first_name").send_keys(personal_info['First Name'])
+            self.browser.find_element(By.ID, "last_name").send_keys(personal_info['Last Name'])
+            self.browser.find_element(By.ID, "email").send_keys(personal_info['Email'])
             try:
-                apply_btn = wait.until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Apply') or contains(text(), 'Apply for this job')]"))
-                )
-                apply_btn.click()
-            except:
-                pass  # May not be present
+                phone_field = self.browser.find_element(By.ID, "phone")
+                phone_value = personal_info.get('Mobile Phone Number', '')
+                if phone_value:
+                    phone_field.send_keys(phone_value)
+            except Exception:
+                pass
 
-            # Wait for file upload field (resume)
-            resume_upload = wait.until(
-                EC.presence_of_element_located((By.XPATH, "//input[@type='file' and contains(@name, 'resume')]"))
-            )
-            resume_upload.send_keys(self.resume_path)  # Ensure this is set in your class
+            # Upload Resume
+            resume_input = self.browser.find_element(By.ID, "resume")
+            resume_input.send_keys(self.resume_dir)
 
-            # Fill required fields by name attribute
-            # (Update as per your config/data structure)
-            fields = {
-                'name': self.name,
-                'email': self.email,
-                'phone': self.phone
-            }
-            for key, value in fields.items():
+            # Upload Cover Letter (optional)
+            try:
+                cover_letter_path = self.cover_letter_dir
+                if cover_letter_path:
+                    cover_letter_input = self.browser.find_element(By.ID, "cover_letter")
+                    cover_letter_input.send_keys(cover_letter_path)
+            except Exception:
+                pass
+
+            # Answer all question_* inputs dynamically using AI
+            question_inputs = self.browser.find_elements(By.XPATH, "//input[starts-with(@id, 'question_')]")
+            for inp in question_inputs:
                 try:
-                    field = self.browser.find_element(By.XPATH, f"//input[contains(@name, '{key}')]")
-                    field.clear()
-                    field.send_keys(value)
-                except:
-                    print(f"Field not found: {key}")
+                    qid = inp.get_attribute('id')
+                    # Find associated label
+                    label_text = ""
+                    try:
+                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{qid}']")
+                        label_text = label_elem.text.strip()
+                    except Exception:
+                        pass
 
-            # Answer textareas (basic default)
-            textareas = self.browser.find_elements(By.TAG_NAME, "textarea")
-            for area in textareas:
-                area.send_keys("N/A")
+                    # For checkboxes and radio buttons, you may need additional logic here.
+                    input_type = inp.get_attribute('type')
+                    if input_type == "checkbox":
+                        # Generate yes/no answer
+                        ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
+                        if ai_answer.strip().lower().startswith("y"):
+                            if not inp.is_selected():
+                                inp.click()
+                    elif input_type == "radio":
+                        ai_answer = self.ai_response_generator.generate_response(label_text, response_type="numeric", jd="")
+                        # TODO: Implement if needed
+                    else:
+                        # Default: treat as text
+                        ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
+                        inp.clear()
+                        inp.send_keys(ai_answer)
+                except Exception as e:
+                    print(f"Could not fill input {inp.get_attribute('id')}: {e}")
 
-            # Tick all checkboxes (cautiously)
-            checkboxes = self.browser.find_elements(By.XPATH, "//input[@type='checkbox']")
-            for box in checkboxes:
+            # Dynamically fill all question_* textareas with AI
+            question_textareas = self.browser.find_elements(By.XPATH, "//textarea[starts-with(@id, 'question_')]")
+            for ta in question_textareas:
                 try:
-                    box.click()
-                except:
-                    continue
+                    qid = ta.get_attribute('id')
+                    label_text = ""
+                    try:
+                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{qid}']")
+                        label_text = label_elem.text.strip()
+                    except Exception:
+                        pass
+                    ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
+                    ta.clear()
+                    ta.send_keys(ai_answer)
+                except Exception as e:
+                    print(f"Could not fill textarea {ta.get_attribute('id')}: {e}")
 
-            # Submit the application
-            submit_btn = self.browser.find_element(By.XPATH, "//button[contains(text(), 'Submit')]")
+            # Wait for uploads to finish
+            time.sleep(1)
+
+            # Submit the form
+            submit_btn = self.browser.find_element(By.XPATH, "//button[contains(text(), 'Submit application')]")
             submit_btn.click()
-            print("Submitted Greenhouse application!")
+            print("Greenhouse application submitted successfully.")
             time.sleep(2)
             return True
 
         except Exception as e:
-            print("Greenhouse flow failed:", e)
+            print(f"Error during Greenhouse application: {e}")
             return False
     def apply_to_job(self):
         easy_apply_button = None
