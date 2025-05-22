@@ -11,6 +11,7 @@ This project automates the LinkedIn Easy Apply job application process, enhanced
 - Works with PDF and DOCX resumes
 - Completely offline AI integration using **Ollama + phi4-mini**
 - Flexibility to use any LLM of choice.
+- Added Applications to greenhouse and Ashybq applications. -- Experiemental
 
 ## 🧩 Technologies Used
 
