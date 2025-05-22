@@ -1,4 +1,4 @@
-# 🧠 LinkedIn Easy Apply Bot with Offline AI Integration (Ollama)
+# 🧠 LinkedIn Apply Bot with Offline AI Integration (Ollama)
 
 This project automates the LinkedIn Easy Apply job application process, enhanced with **AI-powered resume tailoring** and **application question answering** using **offline LLMs via Ollama**. With an option to use any LLM's from any providers **using LiteLLM**.
 
