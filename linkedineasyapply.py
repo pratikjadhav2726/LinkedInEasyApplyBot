@@ -63,7 +63,6 @@ class AIResponseGenerator:
         - Authorized to work in the US: {'Yes' if self.checkboxes.get('legallyAuthorized') else 'No'}
         - Skills: {', '.join(self.experience.keys())}
         - Languages: {', '.join(f'{lang}: {level}' for lang, level in self.languages.items())}
-        - Professional Summary: {self.personal_info.get('MessageToManager', '')}
 
         Resume Content:
         {self.resume_content}
@@ -186,7 +185,7 @@ class AIResponseGenerator:
             context = self._build_context()
             # print(context)
             system_prompt = {
-                "text": "You are a helpful assistant answering job application questions professionally and short. Use the candidate's background information and resume to personalize responses. Pretend you are the candidate.",
+                "text": "You are a helpful assistant answering job application questions professionally and short. Use the candidate's background information and resume to personalize responses. Pretend you are the candidate.Only give the answer if you are sure from background. Otherwise return NA.",
                 "numeric": "You are a helpful assistant providing numeric answers to job application questions. Based on the candidate's experience, provide a single number as your response. No explanation needed.",
                 "choice": "You are a helpful assistant selecting the most appropriate answer choice for job application questions. Based on the candidate's background, select the best option by returning only its index number. No explanation needed."
             }[response_type]
@@ -197,7 +196,7 @@ class AIResponseGenerator:
                 user_content += f"\n\nSelect the most appropriate answer by providing its index number from these options:\n{options_text}"
 
             response = completion(
-                model="groq/gemma2-9b-it",
+                model="groq/llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
@@ -245,24 +244,20 @@ class AIResponseGenerator:
         # if not self._client:
         #     return True  # Proceed with application if AI not available
         try:
-            system_prompt=""" Given Job description summarize it in 70 words, focus on qualifications.
-"""
-            response = ollama.chat(
-                model=self.ollama_model,
+            system_prompt=""" Given Job description summarize it in 120 words, focus on qualifications and years of experience and technical skills. Expertise needed"""
+            response = completion(
+                model="groq/llama-3.1-8b-instant",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}"}
-                ],
-                options={
-                            'num_predict': 250 if self.debug else 1,     # Equivalent to max_tokens
-                            'temperature': 0.7      # Set your desired temperature here
-                        }
+                ]
                 # max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # temperature=0.2  # Lower temperature for more consistent decisions
             )
             
-            job_description = response['message']['content'].strip()
-            print(f"Job Summary: {job_description}")
+            job_description = response.choices[0]['message']['content'].strip()
+            # print(f"Job Summary: {job_description}")
+            time.sleep(5)
         except Exception as e:
             print(f"Error evaluating job fit: {str(e)}")
             return True  # Proceed with application if evaluation fails
@@ -271,7 +266,7 @@ class AIResponseGenerator:
             # print(context)
             percent="80"
             system_prompt = """
-                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least 80 percent of the required qualifications. Otherwise, respond with SKIP.
+                Based on the candidate’s resume and the job description, respond with APPLY if the resume matches at least 85 percent of the required qualifications and experience. Otherwise, respond with SKIP.
                 Only return APPLY or SKIP.
             """
             #Consider the candidate's education level when evaluating whether they meet the core requirements. Having higher education than required should allow for greater flexibility in the required experience.
@@ -293,7 +288,7 @@ class AIResponseGenerator:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}\n\nCandidate:\n{context}"}
                 ],
-                temperature=0.7,
+                temperature=0.9,
                 max_completion_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # max_tokens=250 if self.debug else 1,  # Allow more tokens when debug is enabled
                 # temperature=0.2  # Lower temperature for more consistent decisions
@@ -301,6 +296,7 @@ class AIResponseGenerator:
             
             answer = response.choices[0]['message']['content'].strip()
             print(f"AI evaluation: {answer}")
+            time.sleep(5)
             return answer.upper().startswith('A')  # True for APPLY, False for SKIP
             
         except Exception as e:
@@ -468,7 +464,14 @@ class LinkedinEasyApply:
 
         if 'unfortunately, things are' in self.browser.page_source.lower():
             raise Exception("No more jobs on this page.")
-
+        try:
+            with open("output.csv", 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                self.seen_jobs = [row[2] for row in reader if len(row) > 2]  # Assuming the link is in the 3rd column
+        except FileNotFoundError:
+            print("output.csv not found. Starting with an empty seen_jobs list.")
+        except Exception as e:
+            print(f"Error reading output.csv: {e}")
         job_results_header = ""
         maybe_jobs_crap = ""
         job_results_header = self.browser.find_element(By.CLASS_NAME, "jobs-search-results-list__text")
@@ -564,7 +567,7 @@ class LinkedinEasyApply:
 
             contains_blacklisted_keywords = False
             job_title_parsed = job_title.lower().split(' ')
-
+            
             for word in self.title_blacklist:
                 if word.lower() in job_title_parsed:
                     contains_blacklisted_keywords = True
@@ -646,7 +649,255 @@ class LinkedinEasyApply:
                 print(f"Job for {company} by {poster} contains a blacklisted word {word}.")
 
             self.seen_jobs += link
+    def apply_to_ashby(self, jd=""):
+        """
+        Fills and submits an Ashby application form.
+        Only fills fields that are empty (not already autofilled by resume).
+        :param jd: (optional) job description to pass into LLM context
+        """
+        import time
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        print("Starting Ashybq Application.")
+        personal_info = self.personal_info
+        wait = WebDriverWait(self.browser, 20)
 
+        try:
+            # 1. Go to "Application" tab (if not already there)
+            try:
+                app_tab = self.browser.find_element(By.XPATH, "//span[contains(@class,'ashby-job-posting-right-pane-application-tab') and contains(text(),'Application')]")
+                app_tab.click()
+                time.sleep(1)
+            except Exception:
+                pass  # Already on tab or not present
+
+            # 2. Upload resume (if the upload button exists and file not already attached)
+            try:
+                upload_btn = self.browser.find_element(By.XPATH, "//button[.//span[contains(text(),'Upload File')]]")
+                upload_btn.click()
+                # Now find the hidden input[type=file] in the same parent container
+                file_input = self.browser.find_element(By.XPATH, "//input[@type='file' and @id='_systemfield_resume']")
+                file_input.send_keys(self.resume_dir)
+                print("Resume uploaded for autofill.")
+                # Wait for parsing/autofill to finish (adjust timing as needed)
+                time.sleep(5)
+            except Exception as e:
+                print(f"Could not upload resume (may already be uploaded): {e}")
+
+            # 3. Fill any empty text input fields
+            text_inputs = self.browser.find_elements(By.XPATH, "//input[@type='text' or @type='email']")
+            for inp in text_inputs:
+                try:
+                    # Skip if already filled by autofill
+                    value = inp.get_attribute("value")
+                    if value and value.strip() != "":
+                        continue
+
+                    label_text = ""
+                    try:
+                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{inp.get_attribute('id')}']")
+                        label_text = label_elem.text.strip()
+                    except Exception:
+                        pass
+
+                    # Smart logic for known fields
+                    if "name" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("First Name", "") + " " + personal_info.get("Last Name", ""))
+                    elif "email" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Email", ""))
+                    elif "linkedin" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Linkedin", ""))
+                    elif "github" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("GitHub", ""))
+                    elif "website" in label_text.lower() or "portfolio" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Website", ""))
+                    elif "city" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("City", ""))
+                    elif "state" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("State", ""))
+                    elif "zip" in label_text.lower() or "postal" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Zip", ""))
+                    elif "location" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Location", ""))
+                    elif "visa sponsership" in label_text.lower() or "h1b" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys("yes")
+                    elif "work schedule" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys("Yes")
+                    else:
+                        # Fallback to AI for custom questions
+                        ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd=jd)
+                        inp.clear()
+                        inp.send_keys(ai_answer)
+                except Exception as e:
+                    print(f"Could not fill Ashby text input: {e}")
+
+            # 4. Fill any empty textareas
+            textareas = self.browser.find_elements(By.XPATH, "//textarea")
+            for ta in textareas:
+                try:
+                    value = ta.get_attribute("value")
+                    if value and value.strip() != "":
+                        continue
+                    label_text = ""
+                    try:
+                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{ta.get_attribute('id')}']")
+                        label_text = label_elem.text.strip()
+                    except Exception:
+                        pass
+                    ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd=jd)
+                    ta.clear()
+                    ta.send_keys(ai_answer)
+                except Exception as e:
+                    print(f"Could not fill Ashby textarea: {e}")
+
+            # 5. Optionally handle selects (dropdowns) if needed
+
+            # 6. Submit the form
+            submit_btn = self.browser.find_element(By.XPATH, "//button[contains(@class,'ashby-application-form-submit-button')]")
+            submit_btn.click()
+            print("Ashby application submitted successfully.")
+            time.sleep(2)
+            return True
+
+        except Exception as e:
+            print(f"Error during Ashby application: {e}")
+            return False
+
+    def apply_to_greenhouse(self, jd=""):
+        """
+        Fills and submits a Greenhouse application form using AI-generated answers.
+        :param personal_info: dict with keys 'first_name', 'last_name', 'email', 'phone', 'resume_path', optional: 'cover_letter_path'
+        :param jd: (optional) job description to pass into LLM context
+        """
+        print("Starting Greenhouse Application.")
+        personal_info = self.personal_info
+        wait = WebDriverWait(self.browser, 15)
+        try:
+            # Wait for application form
+            wait.until(EC.presence_of_element_located((By.ID, "application-form")))
+
+            # Fill core fields
+            self.browser.find_element(By.ID, "first_name").send_keys(personal_info['First Name'])
+            self.browser.find_element(By.ID, "last_name").send_keys(personal_info['Last Name'])
+            self.browser.find_element(By.ID, "email").send_keys(personal_info['Email'])
+            try:
+                phone_field = self.browser.find_element(By.ID, "phone")
+                phone_value = personal_info.get('Mobile Phone Number', '')
+                if phone_value:
+                    phone_field.send_keys(phone_value)
+            except Exception:
+                pass
+
+            # Upload Resume
+            resume_input = self.browser.find_element(By.ID, "resume")
+            resume_input.send_keys(self.resume_dir)
+            wait = WebDriverWait(self.browser, 15)
+
+            # Upload Cover Letter (optional)
+            try:
+                cover_letter_path = self.cover_letter_dir
+                if cover_letter_path:
+                    cover_letter_input = self.browser.find_element(By.ID, "cover_letter")
+                    cover_letter_input.send_keys(cover_letter_path)
+                    wait = WebDriverWait(self.browser, 15)
+            except Exception:
+                pass
+
+            # Answer all question_* inputs dynamically using AI
+            question_inputs = self.browser.find_elements(By.XPATH, "//input[starts-with(@id, 'question_')]")
+            for inp in question_inputs:
+                try:
+                    qid = inp.get_attribute('id')
+                    # Find associated label
+                    label_text = ""
+                    try:
+                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{qid}']")
+                        label_text = label_elem.text.strip()
+                    except Exception:
+                        pass
+                    if "linkedin" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Linkedin", ""))
+                    elif "github" in label_text.lower() or "website" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Website", ""))
+                    elif "city" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("City", ""))
+                    elif "state" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("State", ""))
+                    elif "zip" in label_text.lower() or "postal" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys(personal_info.get("Zip", ""))
+                    elif "visa sponsership" in label_text.lower() or "h1b" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys("yes")
+                    elif "work schedule" in label_text.lower():
+                        inp.clear()
+                        inp.send_keys("Yes")
+                    else:
+                    # For checkboxes and radio buttons, you may need additional logic here.
+                        input_type = inp.get_attribute('type')
+                        if input_type == "checkbox":
+                            # Generate yes/no answer
+                            ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
+                            if ai_answer.strip().lower().startswith("y"):
+                                if not inp.is_selected():
+                                    inp.click()
+                        elif input_type == "radio":
+                            ai_answer = self.ai_response_generator.generate_response(label_text, response_type="numeric", jd="")
+                            # TODO: Implement if needed
+                        else:
+                            # Default: treat as text
+                            ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
+                            inp.clear()
+                            inp.send_keys(ai_answer)
+                except Exception as e:
+                    print(f"Could not fill input {inp.get_attribute('id')}: {e}")
+
+            # Dynamically fill all question_* textareas with AI
+            question_textareas = self.browser.find_elements(By.XPATH, "//textarea[starts-with(@id, 'question_')]")
+            for ta in question_textareas:
+                try:
+                    qid = ta.get_attribute('id')
+                    label_text = ""
+                    try:
+                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{qid}']")
+                        label_text = label_elem.text.strip()
+                    except Exception:
+                        pass
+                    ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
+                    ta.clear()
+                    ta.send_keys(ai_answer)
+                except Exception as e:
+                    print(f"Could not fill textarea {ta.get_attribute('id')}: {e}")
+
+            # Wait for uploads to finish
+            time.sleep(1)
+
+            # Submit the form
+            submit_btn = self.browser.find_element(By.XPATH, "//button[contains(text(), 'Submit application')]")
+            submit_btn.click()
+            print("Greenhouse application submitted successfully.")
+            time.sleep(2)
+            return True
+
+        except Exception as e:
+            print(f"Error during Greenhouse application: {e}")
+            return False
     def apply_to_job(self):
         easy_apply_button = None
 
@@ -665,7 +916,50 @@ class LinkedinEasyApply:
 
         print("Starting the job application...")
         easy_apply_button.click()
+        time.sleep(3)  # Wait for redirect/new tab
 
+        # --- New Logic: Check for External Application ---
+        main_window = self.browser.current_window_handle
+        all_windows = self.browser.window_handles
+
+        # If a new window/tab is opened, switch to it
+        for handle in all_windows:
+            if handle != main_window:
+                self.browser.switch_to.window(handle)
+                current_url = self.browser.current_url
+                print("Redirected to:", current_url)
+                
+                # If it's Greenhouse, handle with a new function
+                if "greenhouse.io" in current_url:
+                    try:
+                        success = self.apply_to_greenhouse()
+                        # Optionally close this tab and switch back to LinkedIn
+                        self.browser.close()
+                        self.browser.switch_to.window(main_window)
+                        return success
+                    except Exception as e:
+                        print("Greenhouse application failed:", e)
+                        self.browser.close()
+                        self.browser.switch_to.window(main_window)
+                        return False
+                # --- Ashby ---
+                elif "ashbyhq.com" in current_url or "ashby" in current_url:
+                    try:
+                        success = self.apply_to_ashby()
+                        self.browser.close()
+                        self.browser.switch_to.window(main_window)
+                        return success
+                    except Exception as e:
+                        print("Ashby application failed:", e)
+                        self.browser.close()
+                        self.browser.switch_to.window(main_window)
+                        return False
+
+                # --- (Other external sites can be added here) ---
+
+                # If no match, just close and switch back
+                self.browser.close()
+                self.browser.switch_to.window(main_window)
         button_text = ""
         submit_application_text = 'submit application'
         while submit_application_text not in button_text.lower():
@@ -1431,7 +1725,7 @@ class LinkedinEasyApply:
                 date_url = dates[key]
                 break
 
-        easy_apply_url = "&f_AL=true"
+        easy_apply_url = ""
 
         extra_search_terms = [distance_url, remote_url, lessthanTenApplicants_url, newestPostingsFirst_url, job_types_url, experience_url]
         extra_search_terms_str = '&'.join(
