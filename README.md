@@ -1,18 +1,18 @@
 # 🧠 LinkedIn Apply Bot with Offline AI Integration (Ollama)
 
-This project automates the LinkedIn Easy Apply job application process, enhanced with **AI-powered resume tailoring** and **application question answering** using **offline LLMs via Ollama**. With an option to use any LLM's from any providers **using LiteLLM**.
+This project automates the job application process on LinkedIn Easy Apply and seamlessly extends support to external platforms such as Greenhouse, Ashby, and more. Featuring AI-powered resume tailoring and intelligent question answering via offline LLMs with Ollama (or any LLM provider through LiteLLM), the bot delivers a personalized, end-to-end automation experience for job seekers.
 
 ## 🚀 Features
 
-- Auto-login and apply to jobs using LinkedIn's Easy Apply
-- AI-powered question answering for job applications (text, numeric, choice)
-- Resume tailoring using LLMs based on job description
-- Skills replacement suggestions to optimize ATS score
-- Works with PDF and DOCX resumes
-- Completely offline AI integration using **Ollama + phi4-mini**
-- Flexibility to use any LLM of choice.
-- Added Applications to greenhouse and Ashybq applications. -- Experiemental
-
+	- Automated login and job application for LinkedIn Easy Apply
+	- Experimental support for external applications including Greenhouse and Ashby
+	- AI-driven question answering for application forms (text, numeric, multiple-choice)
+	- Resume tailoring and skill replacement to optimize ATS scores
+	- Support for both PDF and DOCX resumes
+	- Offline AI integration (Ollama + phi4-mini) for data privacy and speed
+	- Flexible backend—integrate any LLM via LiteLLM
+	- Modular codebase designed for extensibility and additional platforms
+ 
 ## 🧩 Technologies Used
 
 - Python (Selenium, PDF, DOCX)
