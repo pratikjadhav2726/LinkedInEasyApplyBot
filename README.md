@@ -1,18 +1,39 @@
+
 # 🧠 LinkedIn Apply Bot with Offline AI Integration (Ollama)
 
-This project automates the job application process on LinkedIn Easy Apply and seamlessly extends support to external platforms such as Greenhouse, Ashby, and more. Featuring AI-powered resume tailoring and intelligent question answering via offline LLMs with Ollama (or any LLM provider through LiteLLM), the bot delivers a personalized, end-to-end automation experience for job seekers.
+## Project Overview
 
-## 🚀 Features
+This project automates the job application process on LinkedIn Easy Apply and extends support to external platforms such as Greenhouse, Ashby, and more. It features AI-powered resume tailoring and intelligent question answering via offline LLMs (Ollama or any LLM provider through LiteLLM), delivering a personalized, end-to-end automation experience for job seekers.
 
-	- Automated login and job application for LinkedIn Easy Apply
-	- Experimental support for external applications including Greenhouse and Ashby
-	- AI-driven question answering for application forms (text, numeric, multiple-choice)
-	- Resume tailoring and skill replacement to optimize ATS scores
-	- Support for both PDF and DOCX resumes
-	- Offline AI integration (Ollama + phi4-mini) for data privacy and speed
-	- Flexible backend—integrate any LLM via LiteLLM
-	- Modular codebase designed for extensibility and additional platforms
- 
+---
+
+## 🚦 Project Status
+
+### ✅ Stable Features
+
+- Automated login and job application for LinkedIn Easy Apply
+- AI-driven question answering for application forms (text, numeric, multiple-choice)
+- Resume tailoring and skill replacement to optimize ATS scores
+- Support for both PDF and DOCX resumes
+- Offline AI integration (Ollama + phi4-mini) for data privacy and speed
+- Flexible backend—integrate any LLM via LiteLLM
+- Modular codebase designed for extensibility and additional platforms
+
+### 🧪 Experimental Features
+
+- Support for external applications including Greenhouse and Ashby
+- Resume tailoring and regeneration (DOCX to PDF)
+
+### 🚧 In Development / On the Way
+
+- Improved resume tailoring using RAG with semantic chunking and vector retrieval
+- Lightweight LLM-powered rewriting of resume sections based on job descriptions
+- Resume context compression for small models to reduce hallucination
+- Confidence scoring and APPLY/SKIP justification for job fit evaluation
+- Pluggable model backend (phi4-mini, Mistral, TinyLlama, etc.)
+- Logging outcomes for feedback loop and model fine-tuning
+
+
 ## 🧩 Technologies Used
 
 - Python (Selenium, PDF, DOCX)
@@ -20,6 +41,7 @@ This project automates the job application process on LinkedIn Easy Apply and se
 - `phi4-mini` model
 - PyAutoGUI (to prevent system sleep)
 - Regex, JSON, CSV, and automation utilities
+
 
 ## 📦 Getting Started
 
@@ -34,22 +56,23 @@ This project automates the job application process on LinkedIn Easy Apply and se
 - Uses LLM to:
   - Extract job-specific skills
   - Replace outdated resume skills
-  - Tailor and regenerate resume (DOCX to PDF) -- Experimental
+  - Tailor and regenerate resume (DOCX to PDF) *(experimental)*
   - Answer custom LinkedIn application questions
-  - Evaluate job fit (optional)
- 
+  - Evaluate job fit (optional, in development)
+
 ## 🔮 Future Work
-	- Improve resume tailoring using RAG with semantic chunking and vector retrieval for better alignment.
-	- Add lightweight LLM-powered rewriting of resume sections based on job descriptions.
-	- Compress resume context for small models to reduce hallucination in question answering.
-	- Introduce confidence scoring and APPLY/SKIP justification for job fit evaluation.
-	- Make model backend pluggable (e.g., phi4-mini, Mistral, TinyLlama).
-	- Log outcomes to enable feedback loop and model fine-tuning.
+
+- Expand support for more external job platforms
+- Add a user-friendly GUI for configuration and monitoring
+- Enhance error handling and reporting
+- Community-driven plugin system for new features
+
 
 ## 📁 Repository Status
 
-> This project is a **modified version** of a popular LinkedIn Easy Apply Bot with enhanced AI capabilities via offline models.  
-Original credit: https://github.com/NathanDuma/LinkedIn-Easy-Apply-Bot
+> This project is a **modified version** of a popular LinkedIn Easy Apply Bot with enhanced AI capabilities via offline models.
+> 
+> Original credit: https://github.com/NathanDuma/LinkedIn-Easy-Apply-Bot
 
 ## 📜 License
 
