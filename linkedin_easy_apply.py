@@ -8,6 +8,9 @@ from datetime import date, datetime
 from itertools import product
 from ai_response_generator import AIResponseGenerator
 import time, random, csv, pyautogui, traceback, os, re
+from utils import enter_text, select_dropdown, radio_select, scroll_slow, get_base_search_url
+from external_applications import apply_to_ashby, apply_to_greenhouse
+from file_utils import write_to_file, record_unprepared_question
 
 class LinkedinEasyApply:
     def __init__(self, parameters, driver):
@@ -23,7 +26,7 @@ class LinkedinEasyApply:
         self.positions = parameters.get('positions', [])
         self.locations = parameters.get('locations', [])
         self.residency = parameters.get('residentStatus', [])
-        self.base_search_url = self.get_base_search_url(parameters)
+        self.base_search_url = get_base_search_url(parameters)
         self.seen_jobs = []
         self.file_name = "output"
         self.unprepared_questions_file_name = "unprepared_questions"
@@ -220,8 +223,8 @@ class LinkedinEasyApply:
             print("Successfully located the element using the random class name.")
 
             # Scroll logic (currently disabled for testing)
-            self.scroll_slow(job_results_by_class)  # Scroll down
-            self.scroll_slow(job_results_by_class, step=300, reverse=True)  # Scroll up
+            scroll_slow(job_results_by_class)  # Scroll down
+            scroll_slow(job_results_by_class, step=300, reverse=True)  # Scroll up
 
             # Find job list elements
             job_list = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')
@@ -335,14 +338,14 @@ class LinkedinEasyApply:
                         self.file_name = "failed"
                         print("Failed to apply to job. Please submit a bug report with this link: " + link)
                         try:
-                            self.write_to_file(company, job_title, link, job_location, location)
+                            write_to_file(self.file_name, company, job_title, link, job_location, location)
                         except:
                             pass
                         self.file_name = temp
                         print(f'updated {temp}.')
 
                     try:
-                        self.write_to_file(company, job_title, link, job_location, location)
+                        write_to_file(self.file_name, company, job_title, link, job_location, location)
                     except Exception:
                         print(
                             f"Unable to save the job information in the file. The job title {job_title} or company {company} cannot contain special characters,")
@@ -355,255 +358,6 @@ class LinkedinEasyApply:
                 print(f"Job for {company} by {poster} contains a blacklisted word {word}.")
 
             self.seen_jobs += link
-    def apply_to_ashby(self, jd=""):
-        """
-        Fills and submits an Ashby application form.
-        Only fills fields that are empty (not already autofilled by resume).
-        :param jd: (optional) job description to pass into LLM context
-        """
-        import time
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        print("Starting Ashybq Application.")
-        personal_info = self.personal_info
-        wait = WebDriverWait(self.browser, 20)
-
-        try:
-            # 1. Go to "Application" tab (if not already there)
-            try:
-                app_tab = self.browser.find_element(By.XPATH, "//span[contains(@class,'ashby-job-posting-right-pane-application-tab') and contains(text(),'Application')]")
-                app_tab.click()
-                time.sleep(1)
-            except Exception:
-                pass  # Already on tab or not present
-
-            # 2. Upload resume (if the upload button exists and file not already attached)
-            try:
-                upload_btn = self.browser.find_element(By.XPATH, "//button[.//span[contains(text(),'Upload File')]]")
-                upload_btn.click()
-                # Now find the hidden input[type=file] in the same parent container
-                file_input = self.browser.find_element(By.XPATH, "//input[@type='file' and @id='_systemfield_resume']")
-                file_input.send_keys(self.resume_dir)
-                print("Resume uploaded for autofill.")
-                # Wait for parsing/autofill to finish (adjust timing as needed)
-                time.sleep(5)
-            except Exception as e:
-                print(f"Could not upload resume (may already be uploaded): {e}")
-
-            # 3. Fill any empty text input fields
-            text_inputs = self.browser.find_elements(By.XPATH, "//input[@type='text' or @type='email']")
-            for inp in text_inputs:
-                try:
-                    # Skip if already filled by autofill
-                    value = inp.get_attribute("value")
-                    if value and value.strip() != "":
-                        continue
-
-                    label_text = ""
-                    try:
-                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{inp.get_attribute('id')}']")
-                        label_text = label_elem.text.strip()
-                    except Exception:
-                        pass
-
-                    # Smart logic for known fields
-                    if "name" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("First Name", "") + " " + personal_info.get("Last Name", ""))
-                    elif "email" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Email", ""))
-                    elif "linkedin" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Linkedin", ""))
-                    elif "github" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("GitHub", ""))
-                    elif "website" in label_text.lower() or "portfolio" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Website", ""))
-                    elif "city" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("City", ""))
-                    elif "state" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("State", ""))
-                    elif "zip" in label_text.lower() or "postal" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Zip", ""))
-                    elif "location" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Location", ""))
-                    elif "visa sponsership" in label_text.lower() or "h1b" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys("yes")
-                    elif "work schedule" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys("Yes")
-                    else:
-                        # Fallback to AI for custom questions
-                        ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd=jd)
-                        inp.clear()
-                        inp.send_keys(ai_answer)
-                except Exception as e:
-                    print(f"Could not fill Ashby text input: {e}")
-
-            # 4. Fill any empty textareas
-            textareas = self.browser.find_elements(By.XPATH, "//textarea")
-            for ta in textareas:
-                try:
-                    value = ta.get_attribute("value")
-                    if value and value.strip() != "":
-                        continue
-                    label_text = ""
-                    try:
-                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{ta.get_attribute('id')}']")
-                        label_text = label_elem.text.strip()
-                    except Exception:
-                        pass
-                    ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd=jd)
-                    ta.clear()
-                    ta.send_keys(ai_answer)
-                except Exception as e:
-                    print(f"Could not fill Ashby textarea: {e}")
-
-            # 5. Optionally handle selects (dropdowns) if needed
-
-            # 6. Submit the form
-            submit_btn = self.browser.find_element(By.XPATH, "//button[contains(@class,'ashby-application-form-submit-button')]")
-            submit_btn.click()
-            print("Ashby application submitted successfully.")
-            time.sleep(2)
-            return True
-
-        except Exception as e:
-            print(f"Error during Ashby application: {e}")
-            return False
-
-    def apply_to_greenhouse(self, jd=""):
-        """
-        Fills and submits a Greenhouse application form using AI-generated answers.
-        :param personal_info: dict with keys 'first_name', 'last_name', 'email', 'phone', 'resume_path', optional: 'cover_letter_path'
-        :param jd: (optional) job description to pass into LLM context
-        """
-        print("Starting Greenhouse Application.")
-        personal_info = self.personal_info
-        wait = WebDriverWait(self.browser, 15)
-        try:
-            # Wait for application form
-            wait.until(EC.presence_of_element_located((By.ID, "application-form")))
-
-            # Fill core fields
-            self.browser.find_element(By.ID, "first_name").send_keys(personal_info['First Name'])
-            self.browser.find_element(By.ID, "last_name").send_keys(personal_info['Last Name'])
-            self.browser.find_element(By.ID, "email").send_keys(personal_info['Email'])
-            try:
-                phone_field = self.browser.find_element(By.ID, "phone")
-                phone_value = personal_info.get('Mobile Phone Number', '')
-                if phone_value:
-                    phone_field.send_keys(phone_value)
-            except Exception:
-                pass
-
-            # Upload Resume
-            resume_input = self.browser.find_element(By.ID, "resume")
-            resume_input.send_keys(self.resume_dir)
-            wait = WebDriverWait(self.browser, 15)
-
-            # Upload Cover Letter (optional)
-            try:
-                cover_letter_path = self.cover_letter_dir
-                if cover_letter_path:
-                    cover_letter_input = self.browser.find_element(By.ID, "cover_letter")
-                    cover_letter_input.send_keys(cover_letter_path)
-                    wait = WebDriverWait(self.browser, 15)
-            except Exception:
-                pass
-
-            # Answer all question_* inputs dynamically using AI
-            question_inputs = self.browser.find_elements(By.XPATH, "//input[starts-with(@id, 'question_')]")
-            for inp in question_inputs:
-                try:
-                    qid = inp.get_attribute('id')
-                    # Find associated label
-                    label_text = ""
-                    try:
-                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{qid}']")
-                        label_text = label_elem.text.strip()
-                    except Exception:
-                        pass
-                    if "linkedin" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Linkedin", ""))
-                    elif "github" in label_text.lower() or "website" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Website", ""))
-                    elif "city" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("City", ""))
-                    elif "state" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("State", ""))
-                    elif "zip" in label_text.lower() or "postal" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys(personal_info.get("Zip", ""))
-                    elif "visa sponsership" in label_text.lower() or "h1b" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys("yes")
-                    elif "work schedule" in label_text.lower():
-                        inp.clear()
-                        inp.send_keys("Yes")
-                    else:
-                    # For checkboxes and radio buttons, you may need additional logic here.
-                        input_type = inp.get_attribute('type')
-                        if input_type == "checkbox":
-                            # Generate yes/no answer
-                            ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
-                            if ai_answer.strip().lower().startswith("y"):
-                                if not inp.is_selected():
-                                    inp.click()
-                        elif input_type == "radio":
-                            ai_answer = self.ai_response_generator.generate_response(label_text, response_type="numeric", jd="")
-                            # TODO: Implement if needed
-                        else:
-                            # Default: treat as text
-                            ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
-                            inp.clear()
-                            inp.send_keys(ai_answer)
-                except Exception as e:
-                    print(f"Could not fill input {inp.get_attribute('id')}: {e}")
-
-            # Dynamically fill all question_* textareas with AI
-            question_textareas = self.browser.find_elements(By.XPATH, "//textarea[starts-with(@id, 'question_')]")
-            for ta in question_textareas:
-                try:
-                    qid = ta.get_attribute('id')
-                    label_text = ""
-                    try:
-                        label_elem = self.browser.find_element(By.XPATH, f"//label[@for='{qid}']")
-                        label_text = label_elem.text.strip()
-                    except Exception:
-                        pass
-                    ai_answer = self.ai_response_generator.generate_response(label_text, response_type="text", jd="")
-                    ta.clear()
-                    ta.send_keys(ai_answer)
-                except Exception as e:
-                    print(f"Could not fill textarea {ta.get_attribute('id')}: {e}")
-
-            # Wait for uploads to finish
-            time.sleep(1)
-
-            # Submit the form
-            submit_btn = self.browser.find_element(By.XPATH, "//button[contains(text(), 'Submit application')]")
-            submit_btn.click()
-            print("Greenhouse application submitted successfully.")
-            time.sleep(2)
-            return True
-
-        except Exception as e:
-            print(f"Error during Greenhouse application: {e}")
-            return False
     def apply_to_job(self):
         easy_apply_button = None
 
@@ -615,8 +369,8 @@ class LinkedinEasyApply:
         try:
             job_description_area = self.browser.find_element(By.ID, "job-details")
             print (f"{job_description_area}")
-            self.scroll_slow(job_description_area, end=1600)
-            self.scroll_slow(job_description_area, end=1600, step=400, reverse=True)
+            scroll_slow(job_description_area, end=1600)
+            scroll_slow(job_description_area, end=1600, step=400, reverse=True)
         except:
             pass
 
@@ -638,8 +392,13 @@ class LinkedinEasyApply:
                 # If it's Greenhouse, handle with a new function
                 if "greenhouse.io" in current_url:
                     try:
-                        success = self.apply_to_greenhouse()
-                        # Optionally close this tab and switch back to LinkedIn
+                        success = apply_to_greenhouse(
+                            self.browser,
+                            self.personal_info,
+                            self.resume_dir,
+                            getattr(self, 'cover_letter_dir', ''),
+                            self.ai_response_generator
+                        )
                         self.browser.close()
                         self.browser.switch_to.window(main_window)
                         return success
@@ -651,7 +410,12 @@ class LinkedinEasyApply:
                 # --- Ashby ---
                 elif "ashbyhq.com" in current_url or "ashby" in current_url:
                     try:
-                        success = self.apply_to_ashby()
+                        success = apply_to_ashby(
+                            self.browser,
+                            self.personal_info,
+                            self.resume_dir,
+                            self.ai_response_generator
+                        )
                         self.browser.close()
                         self.browser.switch_to.window(main_window)
                         return success
@@ -898,7 +662,7 @@ class LinkedinEasyApply:
                         to_select = radio_labels[ai_response]
                     else:
                         to_select = radio_labels[len(radio_labels) - 1]
-                    self.record_unprepared_question("radio", radio_text,ai_response)
+                    record_unprepared_question(self.unprepared_questions_file_name, "radio", radio_text, ai_response)
                 to_select.click()
 
                 if radio_labels:
@@ -944,7 +708,7 @@ class LinkedinEasyApply:
                                                                     response_type="numeric"
                                                                 )
                         no_of_years = ai_response if ai_response is not None else int(self.experience_default)
-                        self.record_unprepared_question(text_field_type, question_text,ai_response)
+                        record_unprepared_question(self.unprepared_questions_file_name, text_field_type, question_text, ai_response)
                     to_enter = no_of_years
 
                 elif 'grade point average' in question_text:
@@ -1003,17 +767,17 @@ class LinkedinEasyApply:
                             question_text,
                             response_type="numeric"
                         )
-                        self.record_unprepared_question(text_field_type, question_text,ai_response)
+                        record_unprepared_question(self.unprepared_questions_file_name, text_field_type, question_text, ai_response)
                         to_enter = ai_response if ai_response is not None else 0
                 elif to_enter == '':
                     ai_response = self.ai_response_generator.generate_response(
                         question_text,
                         response_type="text"
                     )
-                    self.record_unprepared_question(text_field_type, question_text,ai_response)
+                    record_unprepared_question(self.unprepared_questions_file_name, text_field_type, question_text, ai_response)
                     to_enter = ai_response if ai_response is not None else " ‏‏‎ "
 
-                self.enter_text(txt_field, to_enter)
+                enter_text(txt_field, to_enter)
                 continue
             except:
                 print("An exception occurred while filling up text field")  # TODO: Put logging behind debug flag
@@ -1046,7 +810,7 @@ class LinkedinEasyApply:
                         if language.lower() in question_text:
                             proficiency = self.languages[language]
                             break
-                    self.select_dropdown(dropdown_field, proficiency)
+                    select_dropdown(dropdown_field, proficiency)
 
                 elif 'clearance' in question_text:
                     answer = self.get_answer('securityClearance')
@@ -1059,8 +823,8 @@ class LinkedinEasyApply:
                             if 'no' in option.lower():
                                 choice = option
                     if choice == "":
-                        self.record_unprepared_question(text_field_type, question_text)
-                    self.select_dropdown(dropdown_field, choice)
+                        record_unprepared_question(self.unprepared_questions_file_name, text_field_type, question_text)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'assessment' in question_text:
                     answer = self.get_answer('assessment')
@@ -1073,7 +837,7 @@ class LinkedinEasyApply:
                                 choice = option
                     # if choice == "":
                     #    choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'commut' in question_text or 'on-site' in question_text or 'hybrid' in question_text or 'onsite' in question_text:
                     answer = self.get_answer('commute')
@@ -1087,10 +851,10 @@ class LinkedinEasyApply:
                                 choice = option
                     # if choice == "":
                     #    choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'country code' in question_text:
-                    self.select_dropdown(dropdown_field, self.personal_info['Phone Country Code'])
+                    select_dropdown(dropdown_field, self.personal_info['Phone Country Code'])
 
                 elif 'north korea' in question_text:
                     choice = ""
@@ -1099,7 +863,7 @@ class LinkedinEasyApply:
                             choice = option
                     if choice == "":
                         choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'previously employed' in question_text or 'previous employment' in question_text:
                     choice = ""
@@ -1108,7 +872,7 @@ class LinkedinEasyApply:
                             choice = option
                     if choice == "":
                         choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'sponsor' in question_text:
                     answer = self.get_answer('requireVisa')
@@ -1121,7 +885,7 @@ class LinkedinEasyApply:
                                 choice = option
                     if choice == "":
                         choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'above 18' in question_text.lower():  # Check for "above 18" in the question text
                     choice = ""
@@ -1130,7 +894,7 @@ class LinkedinEasyApply:
                             choice = option
                     if choice == "":
                         choice = options[0]  # Default to the first option if 'yes' is not found
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'currently living' in question_text or 'currently reside' in question_text:
                     answer = self.get_answer('residency')
@@ -1143,7 +907,7 @@ class LinkedinEasyApply:
                                 choice = option
                     if choice == "":
                         choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'authorized' in question_text or 'authorised' in question_text:
                     answer = self.get_answer('legallyAuthorized')
@@ -1157,7 +921,7 @@ class LinkedinEasyApply:
                                 choice = option
                     if choice == "":
                         choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'citizenship' in question_text:
                     answer = self.get_answer('legallyAuthorized')
@@ -1168,7 +932,7 @@ class LinkedinEasyApply:
                                 choice = option
                     if choice == "":
                         choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif 'clearance' in question_text:
                     answer = self.get_answer('clearance')
@@ -1182,7 +946,7 @@ class LinkedinEasyApply:
                     if choice == "":
                         choice = options[len(options) - 1]
 
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 elif any(keyword in question_text.lower() for keyword in
                          [
@@ -1213,7 +977,7 @@ class LinkedinEasyApply:
                                 break
                     if answer == 'no':
                         # record unlisted experience as unprepared questions
-                        self.record_unprepared_question("dropdown", question_text)
+                        record_unprepared_question(self.unprepared_questions_file_name, "dropdown", question_text)
 
                     choice = ""
                     for option in options:
@@ -1221,7 +985,7 @@ class LinkedinEasyApply:
                             choice = option
                     if choice == "":
                         choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
 
                 else:
                     print(f"Unhandled dropdown question: {question_text}")
@@ -1235,7 +999,7 @@ class LinkedinEasyApply:
                         response_type="choice",
                         options=choices
                     )
-                    self.record_unprepared_question("dropdown", question_text,ai_response)
+                    record_unprepared_question(self.unprepared_questions_file_name, "dropdown", question_text, ai_response)
                     if ai_response is not None:
                         choice = options[ai_response]
                     else:
@@ -1245,7 +1009,7 @@ class LinkedinEasyApply:
                                 choice = option
 
                     print(f"Selected option: {choice}")
-                    self.select_dropdown(dropdown_field, choice)
+                    select_dropdown(dropdown_field, choice)
                 continue
             except:
                 print("An exception occurred while filling up dropdown field")  # TODO: Put logging behind debug flag
@@ -1274,8 +1038,8 @@ class LinkedinEasyApply:
                 if len(input_buttons) == 0:
                     raise Exception("No input elements found in element")
                 for upload_button in input_buttons:
-                    upload_type = upload_button.find_element(By.XPATH, "..").find_element(By.XPATH,
-                                                                                          "preceding-sibling::*")
+                    upload_type = upload_button.find_element(By.XPATH, "..")\
+                        .find_element(By.XPATH, "preceding-sibling::*")
                     if 'resume' in upload_type.text.lower():
                         upload_button.send_keys(self.resume_dir)
                     elif 'cover' in upload_type.text.lower():
@@ -1286,46 +1050,6 @@ class LinkedinEasyApply:
         except:
             print("Failed to upload resume or cover letter!")
             pass
-
-    def enter_text(self, element, text):
-        element.clear()
-        element.send_keys(text)
-
-    def select_dropdown(self, element, text):
-        select = Select(element)
-        select.select_by_visible_text(text)
-
-    # Radio Select
-    def radio_select(self, element, label_text, clickLast=False):
-        label = element.find_element(By.TAG_NAME, 'label')
-        if label_text in label.text.lower() or clickLast == True:
-            label.click()
-
-    # Contact info fill-up
-    def contact_info(self, form):
-        print("Trying to fill up contact info fields")
-        frm_el = form.find_elements(By.TAG_NAME, 'label')
-        if len(frm_el) > 0:
-            for el in frm_el:
-                text = el.text.lower()
-                if 'email address' in text:
-                    continue
-                elif 'phone number' in text:
-                    try:
-                        country_code_picker = el.find_element(By.XPATH,
-                                                              '//select[contains(@id,"phoneNumber")][contains(@id,"country")]')
-                        self.select_dropdown(country_code_picker, self.personal_info['Phone Country Code'])
-                    except Exception as e:
-                        print("Country code " + self.personal_info[
-                            'Phone Country Code'] + " not found. Please make sure it is same as in LinkedIn.")
-                        print(e)
-                    try:
-                        phone_number_field = el.find_element(By.XPATH,
-                                                             '//input[contains(@id,"phoneNumber")][contains(@id,"nationalNumber")]')
-                        self.enter_text(phone_number_field, self.personal_info['Mobile Phone Number'])
-                    except Exception as e:
-                        print("Could not enter phone number:")
-                        print(e)
 
     def fill_up(self):
         try:
@@ -1347,37 +1071,11 @@ class LinkedinEasyApply:
         except:
             print("An exception occurred while searching for form in modal")
 
-    def write_to_file(self, company, job_title, link, location, search_location):
-        to_write = [company, job_title, link, location, search_location, datetime.now()]
-        file_path = self.file_name + ".csv"
-        print(f'updated {file_path}.')
+    def next_job_page(self, position, location, job_page):
+        self.browser.get("https://www.linkedin.com/jobs/search/" + self.base_search_url +
+                         "&keywords=" + position + location + "&start=" + str(job_page * 25))
 
-        with open(file_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(to_write)
-
-    def record_unprepared_question(self, answer_type, question_text,airesponse=""):
-        to_write = [answer_type, question_text,airesponse]
-        file_path = self.unprepared_questions_file_name + ".csv"
-
-        try:
-            with open(file_path, 'a') as f:
-                writer = csv.writer(f)
-                writer.writerow(to_write)
-                print(f'Updated {file_path} with {to_write}.')
-        except:
-            print(
-                "Special characters in questions are not allowed. Failed to update unprepared questions log.")
-            print(question_text)
-
-    def scroll_slow(self, scrollable_element, start=0, end=3600, step=100, reverse=False):
-        if reverse:
-            start, end = end, start
-            step = -step
-
-        for i in range(start, end, step):
-            self.browser.execute_script("arguments[0].scrollTo(0, {})".format(i), scrollable_element)
-            time.sleep(random.uniform(0.1, .6))
+        self.avoid_lock()
 
     def avoid_lock(self):
         if self.disable_lock:
@@ -1388,59 +1086,3 @@ class LinkedinEasyApply:
         pyautogui.keyUp('ctrl')
         time.sleep(1.0)
         pyautogui.press('esc')
-
-    def get_base_search_url(self, parameters):
-        remote_url = ""
-        lessthanTenApplicants_url = ""
-        newestPostingsFirst_url = ""
-
-        if parameters.get('remote'):
-            remote_url = "&f_WT=2"
-        else:
-            remote_url = ""
-            # TO DO: Others &f_WT= options { WT=1 onsite, WT=2 remote, WT=3 hybrid, f_WT=1%2C2%2C3 }
-
-        if parameters['lessthanTenApplicants']:
-            lessthanTenApplicants_url = "&f_EA=true"
-
-        if parameters['newestPostingsFirst']:
-            newestPostingsFirst_url += "&sortBy=DD"
-
-        level = 1
-        experience_level = parameters.get('experienceLevel', [])
-        experience_url = "f_E="
-        for key in experience_level.keys():
-            if experience_level[key]:
-                experience_url += "%2C" + str(level)
-            level += 1
-
-        distance_url = "?distance=" + str(parameters['distance'])
-
-        job_types_url = "f_JT="
-        job_types = parameters.get('jobTypes', [])
-        # job_types = parameters.get('experienceLevel', [])
-        for key in job_types:
-            if job_types[key]:
-                job_types_url += "%2C" + key[0].upper()
-
-        date_url = ""
-        dates = {"all time": "", "month": "&f_TPR=r2592000", "week": "&f_TPR=r604800", "24 hours": "&f_TPR=r86400"}
-        date_table = parameters.get('date', [])
-        for key in date_table.keys():
-            if date_table[key]:
-                date_url = dates[key]
-                break
-
-        easy_apply_url = ""
-
-        extra_search_terms = [distance_url, remote_url, lessthanTenApplicants_url, newestPostingsFirst_url, job_types_url, experience_url]
-        extra_search_terms_str = '&'.join(
-            term for term in extra_search_terms if len(term) > 0) + easy_apply_url + date_url
-
-        return extra_search_terms_str
-
-    def next_job_page(self, position, location, job_page):
-        self.browser.get("https://www.linkedin.com/jobs/search/" + self.base_search_url +
-                         "&keywords=" + position + location + "&start=" + str(job_page * 25))
-
-        self.avoid_lock()
