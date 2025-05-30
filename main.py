@@ -4,7 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from validate_email import validate_email
 from webdriver_manager.chrome import ChromeDriverManager
-from linkedineasyapply import LinkedinEasyApply
+from linkedin_easy_apply import LinkedinEasyApply
 
 def init_browser():
     browser_options = Options()
