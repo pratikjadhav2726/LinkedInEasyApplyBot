@@ -18,7 +18,7 @@ import ollama
 from litellm import completion
 
 class AIResponseGenerator:
-    def __init__(self, api_key, personal_info, experience, languages, resume_path, checkboxes, ollama_model, text_resume_path=None, debug=False):
+    def __init__(self, api_key, personal_info, experience, languages, resume_path, checkboxes, model_name, text_resume_path=None, debug=False):
         self.personal_info = personal_info
         self.experience = experience
         self.languages = languages
@@ -27,7 +27,7 @@ class AIResponseGenerator:
         self.checkboxes = checkboxes
         self._resume_content = None
         self._client = True
-        self.ollama_model = ollama_model
+        self.model_name = model_name  # Unified model name for LiteLLM
         self.debug = debug
     @property
     def resume_content(self):
@@ -82,7 +82,7 @@ class AIResponseGenerator:
             {job_description}
             """
         response = requests.post("http://localhost:11434/api/generate", json={
-                    "model": self.ollama_model,
+                    "model": self.model_name,
                     "prompt": system_prompt,
                     "stream": False
                 })
@@ -119,7 +119,7 @@ class AIResponseGenerator:
                     {self.resume_content}
                     """
             response = requests.post("http://localhost:11434/api/generate", json={
-                    "model": self.ollama_model,
+                    "model": self.model_name,
                     "prompt": system_prompt+user_content,
                     "stream": False
                 })
@@ -188,7 +188,7 @@ class AIResponseGenerator:
                 user_content += f"\n\nSelect the most appropriate answer by providing its index number from these options:\n{options_text}"
 
             response = completion(
-                model="groq/llama-3.3-70b-versatile",
+                model=self.model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
@@ -238,7 +238,7 @@ class AIResponseGenerator:
         try:
             system_prompt=""" Given Job description summarize it in 120 words, focus on qualifications and years of experience and technical skills. Expertise needed"""
             response = completion(
-                model="groq/llama-3.1-8b-instant",
+                model=self.model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}"}
@@ -275,7 +275,7 @@ class AIResponseGenerator:
                 system_prompt += """Return only APPLY or SKIP."""
 
             response = completion(
-                model="groq/gemma2-9b-it",
+                model=self.model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Job: {job_title}\n{job_description}\n\nCandidate:\n{context}"}

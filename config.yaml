@@ -246,4 +246,7 @@ docxResume: /home/Pratik/Documents/Applications/Resume/resume_export.docx
 
 # Debugging mode, used to print more information to the console and fetch more information in AI responses
 debug: False
-ollamaModel: your-model
+
+# ------------ Additional parameters: model selection ---------------
+# Specify the model to use for AI completions. Supported: groq/..., openai/..., ollama/..., anthropic/..., bedrock/..., etc.
+modelName: groq/llama-3.3-70b-versatile  # Example: groq/llama-3.3-70b-versatile, openai/gpt-4o, ollama/mistral, etc.

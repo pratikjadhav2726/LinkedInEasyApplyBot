@@ -18,7 +18,7 @@ class LinkedinEasyApply:
         self.email = parameters['email']
         self.password = parameters['password']
         self.openai_api_key = parameters.get('openaiApiKey', '')  # Get API key with empty default
-        self.ollama_model = parameters.get('ollamaModel', '')
+        self.model_name = parameters.get('modelName', '')  # Unified model selection
         self.disable_lock = parameters['disableAntiLock']
         self.company_blacklist = parameters.get('companyBlacklist', []) or []
         self.title_blacklist = parameters.get('titleBlacklist', []) or []
@@ -59,7 +59,7 @@ class LinkedinEasyApply:
             checkboxes=self.checkboxes,
             text_resume_path=self.text_resume,
             debug=self.debug,
-            ollama_model=self.ollama_model
+            model_name=self.model_name
         )
 
     def login(self):
