@@ -67,65 +67,62 @@ class AIResponseGenerator:
         Resume Content:
         {self.resume_content}
         """
-    def get_tailored_skills_replacements(self,job_description):
-        system_prompt = f"""You are an expert resume and job description analyst.
-
-            Your task is to read the job description below and extract the **top 10 technical skills or tools** that are essential for the role.
-
-            Guidelines:
-            - Return skills exactly as written in the job description (no synonyms, no rewording).
-            - Include programming languages, libraries, frameworks, cloud platforms, APIs, machine learning techniques, tools, and standards mentioned.
-            - Focus on the most important and unique technical terms. Do not include soft skills or generic phrases.
-            - Return the output as a **comma-separated list** of skill keywords, in order of relevance and frequency.
-
-            Job Description:
-            {job_description}
-            """
-        response = requests.post("http://localhost:11434/api/generate", json={
-                    "model": self.model_name,
-                    "prompt": system_prompt,
-                    "stream": False
-                })
-        job_skills = response['message']['content'].strip()
-        
-        MAX_SKILL_REPLACEMENTS = 5
-        system_prompt ="""
-                        You are an AI assistant specialized in optimizing resumes for Applicant Tracking Systems (ATS).
-
-                        Your task:
-                        Given a list of resume skills and a list of job description skills, identify **exactly 5 skills** from the resume that can be replaced with **more relevant skills from the job description** to improve alignment and ATS score.
-
-                        Strict Rules:
-                        1. Each "old" skill must exist in the resume.
-                        2. Each "new" skill must exist in the job description and **must NOT already exist in the resume**.
-                        3. DO NOT suggest replacements that are already present in the resume in any form (no duplicates, no synonyms).
-                        4. Only suggest replacements where the old and new skills are **semantically similar** — i.e., they belong to the same category or purpose (e.g., frameworks, cloud platforms, dev tools, AI methods, APIs).
-                        5. Return **exactly 5 valid replacements**. If there are not enough matches, return fewer — do not force unrelated replacements.
-                        6. Your output must be a **JSON array**, in this exact format:
-
-                        [
-                        {"old": "old_resume_skill", "new": "new_job_description_skill"},
-                        {"old": "old_resume_skill", "new": "new_job_description_skill"},
-                        ...
-                        ]
-
-                        Do not include any explanation, heading, or commentary. Only output the JSON array.
-                                                """
+    def get_tailored_skills_replacements(self, job_description):
+        # Step 1: Extract top 10 technical skills from job description
+        system_prompt_1 = (
+            "You are an expert resume and job description analyst.\n"
+            "Your task is to read the job description below and extract the **top 10 technical skills or tools** that are essential for the role.\n"
+            "Guidelines:\n"
+            "- Return skills exactly as written in the job description (no synonyms, no rewording).\n"
+            "- Include programming languages, libraries, frameworks, cloud platforms, APIs, machine learning techniques, tools, and standards mentioned.\n"
+            "- Focus on the most important and unique technical terms. Do not include soft skills or generic phrases.\n"
+            "- Return the output as a **comma-separated list** of skill keywords, in order of relevance and frequency.\n\n"
+            f"Job Description:\n{job_description}"
+        )
         try:
-            user_content=f""" Job Skills:
-                    {job_skills}
+            response_1 = completion(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt_1}
+                ]
+            )
+            job_skills = response_1.choices[0]['message']['content'].strip()
+        except Exception as e:
+            print(f"Error extracting job skills: {str(e)}")
+            return None
 
-                    Resume:
-                    {self.resume_content}
-                    """
-            response = requests.post("http://localhost:11434/api/generate", json={
-                    "model": self.model_name,
-                    "prompt": system_prompt+user_content,
-                    "stream": False
-                })
-            answer = response['message']['content'].strip()
+        # Step 2: Suggest tailored skill replacements
+        MAX_SKILL_REPLACEMENTS = 5
+        system_prompt_2 = (
+            "You are an AI assistant specialized in optimizing resumes for Applicant Tracking Systems (ATS).\n\n"
+            "Your task:\n"
+            "Given a list of resume skills and a list of job description skills, identify **exactly 5 skills** from the resume that can be replaced with **more relevant skills from the job description** to improve alignment and ATS score.\n\n"
+            "Strict Rules:\n"
+            "1. Each \"old\" skill must exist in the resume.\n"
+            "2. Each \"new\" skill must exist in the job description and **must NOT already exist in the resume**.\n"
+            "3. DO NOT suggest replacements that are already present in the resume in any form (no duplicates, no synonyms).\n"
+            "4. Only suggest replacements where the old and new skills are **semantically similar** — i.e., they belong to the same category or purpose (e.g., frameworks, cloud platforms, dev tools, AI methods, APIs).\n"
+            "5. Return **exactly 5 valid replacements**. If there are not enough matches, return fewer — do not force unrelated replacements.\n"
+            "6. Your output must be a **JSON array**, in this exact format:\n\n"
+            "[\n"
+            "{\"old\": \"old_resume_skill\", \"new\": \"new_job_description_skill\"},\n"
+            "{\"old\": \"old_resume_skill\", \"new\": \"new_job_description_skill\"},\n"
+            "...\n"
+            "]\n\n"
+            "Do not include any explanation, heading, or commentary. Only output the JSON array."
+        )
+        user_content_2 = f"Job Skills:\n{job_skills}\n\nResume:\n{self.resume_content}"
+        try:
+            response_2 = completion(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt_2},
+                    {"role": "user", "content": user_content_2}
+                ]
+            )
+            answer = response_2.choices[0]['message']['content'].strip()
             replacements = json.loads(re.search(r'\[.*\]', answer, re.DOTALL).group())
-            print(f"AI response: {answer}") 
+            print(f"AI response: {answer}")
             return replacements[:MAX_SKILL_REPLACEMENTS]
         except Exception as e:
             print(f"Error using AI to generate resume tailoring skills: {str(e)}")
