@@ -1,3 +1,12 @@
+"""
+Unit tests for the AIResponseGenerator class.
+
+This module contains tests for the AIResponseGenerator, particularly focusing on
+the `tailor_resume_pdf` method's functionality, including PDF parsing,
+text replacement, dynamic output path generation, and error handling.
+It also tests other integrated functionalities like `resume_content` reloading.
+Extensive mocking is used for external dependencies like PyPDF2 and file operations.
+"""
 import unittest
 import os
 from datetime import datetime as dt # Alias to avoid conflict with datetime class attribute
@@ -19,8 +28,25 @@ except ImportError:
 from src.ai.ai_response_generator import AIResponseGenerator
 
 class TestAIResponseGenerator(unittest.TestCase):
+    """
+    Test suite for the AIResponseGenerator class.
+
+    This class sets up a common environment for testing the AIResponseGenerator,
+    including mock data for personal information, experience, resume paths, etc.
+    It uses unittest.mock to patch external dependencies like PyPDF2,
+    file I/O operations (`open`), and datetime functions to ensure tests are
+    deterministic and isolated.
+
+    Key areas tested include:
+    - PDF resume tailoring (`tailor_resume_pdf` method).
+    - Correct handling of skill replacements (case-insensitive).
+    - Dynamic generation of output filenames with timestamps.
+    - Error handling for file operations and PDF processing.
+    - Interaction between resume tailoring and resume content loading.
+    """
 
     def setUp(self):
+        """Sets up the test environment before each test method."""
         self.mock_personal_info = {
             'First Name': 'Test', 'Last Name': 'User', 'City': 'Testville', 'State': 'TS'
         }
@@ -51,6 +77,7 @@ class TestAIResponseGenerator(unittest.TestCase):
         self.formatted_timestamp = self.fixed_datetime.strftime("%Y%m%d_%H%M%S")
 
     def tearDown(self):
+        """Cleans up any created files after each test method if necessary."""
         # Clean up dummy files or directories if any were created by tests (not mocks)
         # These paths should match those potentially created in tests if mocks fail or if actual files are written
         paths_to_check = [
@@ -68,6 +95,16 @@ class TestAIResponseGenerator(unittest.TestCase):
     @patch('src.ai.ai_response_generator.PyPDF2.PdfReader')
     @patch('builtins.open', new_callable=mock_open)
     def test_tailor_resume_pdf_success(self, mock_file_open, mock_pdf_reader_cls, mock_pdf_writer_cls, mock_datetime):
+        """
+        Tests successful PDF tailoring with dynamic path generation and state updates.
+
+        Verifies that:
+        - PyPDF2.PdfReader and PyPDF2.PdfWriter are called correctly.
+        - Page text extraction and page additions to the writer occur.
+        - `open` is called with a dynamically generated, timestamped output path.
+        - The generator's `resume_dir` is updated to the new path.
+        - The generator's `_resume_content` is reset to None.
+        """
         mock_datetime.now.return_value = self.fixed_datetime
 
         # Configure PdfReader mock
@@ -119,6 +156,14 @@ class TestAIResponseGenerator(unittest.TestCase):
     @patch('src.ai.ai_response_generator.PyPDF2.PdfReader')
     @patch('builtins.open', new_callable=mock_open)
     def test_tailor_resume_pdf_case_insensitive_replacement(self, mock_file, mock_pdf_reader_cls, mock_pdf_writer_cls, mock_print, mock_datetime):
+        """
+        Tests that skill replacement in PDF text is case-insensitive.
+
+        Verifies that:
+        - A skill in the PDF text is replaced even if its casing doesn't match
+          the casing of the 'old' skill in the replacements list.
+        - A log message confirming case-insensitive replacement is printed.
+        """
         mock_datetime.now.return_value = self.fixed_datetime
 
         mock_pdf_reader_instance = MagicMock()
@@ -140,6 +185,13 @@ class TestAIResponseGenerator(unittest.TestCase):
 
     @patch('src.ai.ai_response_generator.PyPDF2.PdfReader')
     def test_tailor_resume_pdf_file_not_found(self, mock_pdf_reader_cls):
+        """
+        Tests error handling when the input PDF file is not found.
+
+        Verifies that:
+        - The `tailor_resume_pdf` method returns `None`.
+        - The generator's `resume_dir` remains unchanged.
+        """
         mock_pdf_reader_cls.side_effect = FileNotFoundError("File not found")
 
         initial_resume_dir = self.generator.resume_dir # Store before call
@@ -150,6 +202,13 @@ class TestAIResponseGenerator(unittest.TestCase):
 
     @patch('src.ai.ai_response_generator.PyPDF2.PdfReader')
     def test_tailor_resume_pdf_pdf_read_error(self, mock_pdf_reader_cls):
+        """
+        Tests error handling when PyPDF2 encounters an error reading the PDF.
+
+        Verifies that:
+        - The `tailor_resume_pdf` method returns `None`.
+        - The generator's `resume_dir` remains unchanged.
+        """
         global PdfReadError # Use the globally defined PdfReadError (either real or dummy)
         mock_pdf_reader_cls.side_effect = PdfReadError('Test PDF read error')
 
@@ -166,6 +225,15 @@ class TestAIResponseGenerator(unittest.TestCase):
     @patch('src.ai.ai_response_generator.PyPDF2.PdfReader')
     @patch('builtins.open', new_callable=mock_open)
     def test_tailor_resume_pdf_no_replacements_made(self, mock_file, mock_pdf_reader_cls, mock_pdf_writer_cls, mock_print, mock_datetime):
+        """
+        Tests behavior when no skills specified for replacement are found in the PDF.
+
+        Verifies that:
+        - The PDF is still processed, and a new (unaltered content) PDF is saved
+          with a dynamic, timestamped name.
+        - The generator's `resume_dir` is updated to this new path.
+        - Debug logs indicate that the skills were not found for replacement.
+        """
         mock_datetime.now.return_value = self.fixed_datetime
 
         mock_pdf_reader_instance = MagicMock()
@@ -198,6 +266,15 @@ class TestAIResponseGenerator(unittest.TestCase):
     @patch('src.ai.ai_response_generator.PyPDF2.PdfReader')
     @patch('builtins.open', new_callable=mock_open)
     def test_resume_content_reloads_after_tailoring(self, mock_file_open, mock_pdf_reader_cls, mock_pdf_writer_cls, mock_datetime):
+        """
+        Tests that `resume_content` property reloads from the new path after tailoring.
+
+        Verifies that:
+        - After `tailor_resume_pdf` is called and `self.generator.resume_dir` is updated,
+          a subsequent access to `self.generator.resume_content` causes `PyPDF2.PdfReader`
+          to be called with the new, tailored PDF path.
+        - The content returned matches the content mocked for the tailored PDF.
+        """
         mock_datetime.now.return_value = self.fixed_datetime
 
         # --- Mocking for tailor_resume_pdf call (first use of PdfReader) ---
