@@ -66,7 +66,7 @@ residentStatus: False
 distance: 100
 
 # Optional directory to save logs, does not work sometimes. Does not work sometimes, so leave it unchanged.
-outputFileDirectory: ~/Documents/Applications/EasyApplyBot/EasyApplyBot/
+outputFileDirectory: output/
 
 # Companies you don't want to apply.
 companyBlacklist:
@@ -87,7 +87,7 @@ posterBlacklist:
 # so apply one job manually once, bot will reuse manually uploaded CV for automating the task.
 # Note: Prefer a path without spaces, i.e. instead of "Me My" to "MeMy" or "Me_My".
 uploads:
- resume: C:\Users\myDirectory\Resume.pdf
+ resume: sample_resume.pdf
  # Cover letter is optional
  #coverLetter: C:\Users\myDirectory\CoverLettter.pdf
 
@@ -241,8 +241,8 @@ evaluateJobFit: False
 tailorResume: False
 
 # Path to the text version of your resume, used to extract text from the resume for AI evaluation of job fit, used if OpenAI API Key is configured and evaluateJobFit is True.
-textResume: /home/Pratik/Documents/Applications/Resume/resume_export.txt
-docxResume: /home/Pratik/Documents/Applications/Resume/resume_export.docx
+textResume: sample_text_resume.txt
+docxResume: sample_docx_resume.docx
 
 # Debugging mode, used to print more information to the console and fetch more information in AI responses
 debug: False

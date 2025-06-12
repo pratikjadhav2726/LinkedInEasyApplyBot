@@ -6,11 +6,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from datetime import date, datetime
 from itertools import product
-from ai_response_generator import AIResponseGenerator
+from ai.ai_response_generator import AIResponseGenerator
 import time, random, csv, pyautogui, traceback, os, re
-from utils import enter_text, select_dropdown, radio_select, scroll_slow, get_base_search_url
-from external_applications import apply_to_ashby, apply_to_greenhouse
-from file_utils import write_to_file, record_unprepared_question
+from utils.utils import enter_text, select_dropdown, radio_select, scroll_slow, get_base_search_url
+from external.external_applications import apply_to_ashby, apply_to_greenhouse
+from utils.file_utils import write_to_file, record_unprepared_question
 
 class LinkedinEasyApply:
     def __init__(self, parameters, driver):
