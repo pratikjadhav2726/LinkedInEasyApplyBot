@@ -514,7 +514,7 @@ def apply_to_greenhouse(browser, personal_info, resume_dir, cover_letter_dir, ai
 if __name__ == "__main__":
     import sys
     import yaml
-    from ai_response_generator import AIResponseGenerator
+    from ai.ai_response_generator import AIResponseGenerator
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
 
