@@ -1,4 +1,5 @@
-import time, random, csv, pyautogui, traceback, os, re
+import time, random, csv, pyautogui, os, re # Removed traceback here as it's added later
+import traceback # Added traceback
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -10,25 +11,29 @@ from selenium.webdriver.support.ui import Select
 from datetime import date, datetime
 from itertools import product
 from pypdf import PdfReader
+import PyPDF2 # Added for PDF manipulation
 import requests
-from docx import Document
-from docx2pdf import convert
+# from docx import Document # Removed docx import
+# from docx2pdf import convert # Removed docx2pdf import
 import json
 import ollama
 from litellm import completion
+# import traceback # Ensure traceback is imported if used, it was added above.
 
 class AIResponseGenerator:
     def __init__(self, api_key, personal_info, experience, languages, resume_path, checkboxes, model_name, text_resume_path=None, debug=False):
         self.personal_info = personal_info
         self.experience = experience
         self.languages = languages
-        self.pdf_resume_path = resume_path
+        self.pdf_resume_path = resume_path # This will be used as input_pdf_path
         self.text_resume_path = text_resume_path
         self.checkboxes = checkboxes
         self._resume_content = None
         self._client = True
         self.model_name = model_name  # Unified model name for LiteLLM
         self.debug = debug
+        self.resume_dir = resume_path # Initialize resume_dir, will be updated by tailor_resume_pdf
+
     @property
     def resume_content(self):
         if self._resume_content is None:
@@ -43,17 +48,21 @@ class AIResponseGenerator:
                     print(f"Could not read text resume: {str(e)}")
 
             # Fall back to PDF resume if text resume fails or isn't available
+            # Ensure this uses self.resume_dir which might be updated
+            current_pdf_path = self.resume_dir if hasattr(self, 'resume_dir') and self.resume_dir else self.pdf_resume_path
             try:
                 content = []
-                reader = PdfReader(self.pdf_resume_path)
+                # reader = PdfReader(self.pdf_resume_path) # Original line
+                reader = PdfReader(current_pdf_path) # Use current_pdf_path
                 for page in reader.pages:
                     content.append(page.extract_text())
                 self._resume_content = "\n".join(content)
-                print("Successfully loaded PDF resume")
+                print(f"Successfully loaded PDF resume from {current_pdf_path}")
             except Exception as e:
-                print(f"Could not extract text from resume PDF: {str(e)}")
+                print(f"Could not extract text from resume PDF ({current_pdf_path}): {str(e)}")
                 self._resume_content = ""
         return self._resume_content
+
     def _build_context(self):
         return f"""
         Personal Information:
@@ -127,31 +136,92 @@ class AIResponseGenerator:
         except Exception as e:
             print(f"Error using AI to generate resume tailoring skills: {str(e)}")
             return None
-    def tailor_resume_pdf(self,replacements):
+
+    def tailor_resume_pdf(self, replacements, input_pdf_path):
         try:
-            # job_description = self.browser.find_element(
-            #                     By.ID, 'job-details'
-            #                 ).text 
-            # replacements=self.get_tailored_skills_replacements(job_description)
-            doc = Document(self.docx_resume)
-            def replace_in_runs(runs, old, new):
-                for run in runs:
-                    if old in run.text:
-                        run.text = run.text.replace(old, new)
+            if not input_pdf_path:
+                print("Error: Input PDF path is not provided.")
+                return None
 
-            for paragraph in doc.paragraphs:
-                for r in replacements:
-                    replace_in_runs(paragraph.runs, r['old'], r['new'])
-            output_docx_path= "Pratik_Shankar_Jadhav.docx"
-            output_pdf_path= "Pratik_Shankar_Jadhav_.pdf"
-            doc.save(output_docx_path)
-            convert(output_docx_path, output_pdf_path)
-            self.resume_dir = output_pdf_path
-            print(f"Resume updated and converted to PDF and resume path changed: {output_pdf_path}")
+            print(f"Starting to tailor PDF: {input_pdf_path}")
+            pdf_reader = PyPDF2.PdfReader(input_pdf_path)
+            pdf_writer = PyPDF2.PdfWriter()
 
-        except Exception as e:
-            print(f"Error using tailor resume: {str(e)}")
+            modified_texts = []
+
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                try:
+                    original_text = page.extract_text()
+                    if original_text is None:
+                        print(f"Warning: Could not extract text from page {page_num + 1}.")
+                        # Add original page if text extraction fails
+                        pdf_writer.add_page(page)
+                        continue
+
+                    modified_page_text = original_text
+                    for r in replacements:
+                        old_skill = r['old']
+                        new_skill = r['new']
+                        # Use re.compile for case-insensitive search and re.escape for literal matching
+                        pattern = re.compile(re.escape(old_skill), re.IGNORECASE)
+                        if pattern.search(modified_page_text):
+                            modified_page_text = pattern.sub(new_skill, modified_page_text)
+                            print(f"  Page {page_num + 1}: Replaced '{old_skill}' (case-insensitively) with '{new_skill}'")
+                        else:
+                            if self.debug:
+                                print(f"  Page {page_num + 1}: Skill '{old_skill}' not found for replacement (checked case-insensitively).")
+
+                    modified_texts.append({
+                        "page": page_num + 1,
+                        "original_text_snippet": original_text[:100] + "...", # Log snippet
+                        "modified_text_snippet": modified_page_text[:100] + "..." # Log snippet
+                    })
+
+                    # Add the original page to the writer, as PyPDF2 doesn't support easy in-place text replacement
+                    # The text replacement performed above is on the extracted string and not on the PDF page object directly.
+                    pdf_writer.add_page(page)
+
+                except Exception as e:
+                    print(f"Error processing page {page_num + 1}: {str(e)}")
+                    # Add original page in case of error processing it
+                    pdf_writer.add_page(page)
+
+            # Define dynamic output path based on input path
+            directory = os.path.dirname(input_pdf_path)
+            base_name = os.path.basename(input_pdf_path)
+            name, ext = os.path.splitext(base_name)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_pdf_path = os.path.join(directory, f"{name}_tailored_{timestamp}{ext}")
+
+            with open(output_pdf_path, 'wb') as output_file:
+                pdf_writer.write(output_file)
+
+            self.resume_dir = output_pdf_path  # Update the resume_dir with the path of the new PDF
+            self._resume_content = None # Reset resume content so it's re-read next time
+
+            print(f"Resume tailoring process complete. Modified PDF (original structure preserved) saved to: {output_pdf_path}")
+            if modified_texts:
+                print("Summary of text modifications (logged, not directly in PDF page content):")
+                for mod_text in modified_texts:
+                    print(f"  Page {mod_text['page']}:")
+                    # print(f"    Original snippet: {mod_text['original_text_snippet']}") # Potentially verbose
+                    print(f"    Attempted changes for page {mod_text['page']} logged above during processing.")
+            print("Note: PyPDF2 does not support direct in-place text editing of PDF content streams easily. The original PDF structure is preserved. Text replacements are logged.")
+
+        except FileNotFoundError:
+            print(f"Error: The input PDF file was not found at {input_pdf_path}")
             return None
+        except PyPDF2.errors.PdfReadError as pre:
+            print(f"Error reading PDF {input_pdf_path}. It might be corrupted or password-protected: {str(pre)}")
+            return None
+        except Exception as e:
+            print(f"Error during PDF tailoring: {str(e)}")
+            traceback.print_exc()
+            return None
+        return output_pdf_path
+
+
     def generate_response(self, question_text, response_type="text", options=None, max_tokens=100, jd=""):
         """
         Generate a response using OpenAI's API
