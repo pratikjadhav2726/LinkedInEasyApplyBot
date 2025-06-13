@@ -9,3 +9,5 @@ failed.csv
 output.csv
 config.yaml
 resume_update.py
+.env
+config.prod.yaml

@@ -9,3 +9,4 @@ ollama
 docx2pdf
 docx
 litellm
+PyPDF2
